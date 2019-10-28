@@ -1,0 +1,144 @@
+package golisp2
+
+import "testing"
+
+func Test_TokenizeString(t *testing.T) {
+	testCases := []struct {
+		Name     string
+		Input    string
+		Output   []ScannedToken
+		Disabled bool
+	}{
+		{
+			Name:  "OpenClose",
+			Input: `()`,
+			Output: []ScannedToken{
+				ScannedToken{
+					Typ:   OpenParenTT,
+					Value: "(",
+				},
+				ScannedToken{
+					Typ:   CloseParenTT,
+					Value: ")",
+				},
+			},
+		},
+		{
+			Name:  "Operators",
+			Input: `+ - / * &^%!|<>= =<<<`,
+			Output: []ScannedToken{
+				ScannedToken{
+					Typ:   OpTT,
+					Value: "+",
+				},
+				ScannedToken{
+					Typ:   OpTT,
+					Value: "-",
+				},
+				ScannedToken{
+					Typ:   OpTT,
+					Value: "/",
+				},
+				ScannedToken{
+					Typ:   OpTT,
+					Value: "*",
+				},
+				ScannedToken{
+					Typ:   OpTT,
+					Value: "&^%!|<>=",
+				},
+				ScannedToken{
+					Typ:   OpTT,
+					Value: "=<<<",
+				},
+			},
+		},
+		{
+			Name:  "BasicNumbers",
+			Input: `1 -2 57.123`,
+			Output: []ScannedToken{
+				ScannedToken{
+					Typ:   NumberTT,
+					Value: "1",
+				},
+				ScannedToken{
+					Typ:   NumberTT,
+					Value: "-2",
+				},
+				ScannedToken{
+					Typ:   NumberTT,
+					Value: "57.123",
+				},
+			},
+		},
+		{
+			Name:  "BasicOp",
+			Input: `(+ 1 -2)`,
+			Output: []ScannedToken{
+				ScannedToken{
+					Typ:   OpenParenTT,
+					Value: "(",
+				},
+				ScannedToken{
+					Typ:   OpTT,
+					Value: "+",
+				},
+				ScannedToken{
+					Typ:   NumberTT,
+					Value: "1",
+				},
+				ScannedToken{
+					Typ:   NumberTT,
+					Value: "-2",
+				},
+				ScannedToken{
+					Typ:   CloseParenTT,
+					Value: ")",
+				},
+			},
+		},
+		{
+			Name:  "BasicStr",
+			Input: `"abc efg"`,
+			Output: []ScannedToken{
+				ScannedToken{
+					Typ:   StringTT,
+					Value: `"abc efg"`,
+				},
+			},
+			Disabled: true,
+		},
+	}
+
+	for _, c := range testCases {
+		t.Run(c.Name, func(t *testing.T) {
+			if c.Disabled {
+				t.Skip("test marked as skipped")
+			}
+
+			tokens := TokenizeString(c.Input)
+
+			// note (bs): in this case, it might be better to still perform iteration
+			// for the shared length, but then error afterwards with whatever
+			// missed/expected tokens there are
+			if len(tokens) != len(c.Output) {
+				t.Fatalf("Token length mismatch [expected=%+v] [actual=%+v]",
+					c.Output, tokens)
+			}
+
+			for tokenI, expectedV := range c.Output {
+				actualV := tokens[tokenI]
+				if expectedV.Typ != actualV.Typ {
+					// note (bs): this will be kinda inscrutable as it's not properly
+					// "strung"
+					t.Fatalf("Mismatched token types at index %d [expected=%s] [actual=%s]",
+						tokenI, expectedV.Typ, actualV.Typ)
+				}
+				if expectedV.Value != actualV.Value {
+					t.Fatalf("Mismatched token values at index %d [expected=%s] [actual=%s]",
+						tokenI, expectedV.Value, actualV.Value)
+				}
+			}
+		})
+	}
+}
