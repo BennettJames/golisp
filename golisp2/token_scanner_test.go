@@ -1,6 +1,11 @@
 package golisp2
 
-import "testing"
+import (
+	"bufio"
+	"fmt"
+	"strings"
+	"testing"
+)
 
 func Test_TokenizeString(t *testing.T) {
 	testCases := []struct {
@@ -11,7 +16,7 @@ func Test_TokenizeString(t *testing.T) {
 	}{
 		{
 			Name:  "OpenClose",
-			Input: `()`,
+			Input: `(   )`,
 			Output: []ScannedToken{
 				ScannedToken{
 					Typ:   OpenParenTT,
@@ -72,8 +77,26 @@ func Test_TokenizeString(t *testing.T) {
 			},
 		},
 		{
+			Name:  "TrailingDecimal",
+			Input: `(+ 57. )`,
+			Output: []ScannedToken{
+				ScannedToken{
+					Typ:   OpenParenTT,
+					Value: "(",
+				},
+				ScannedToken{
+					Typ:   OpTT,
+					Value: "+",
+				},
+				ScannedToken{
+					Typ:   InvalidTT,
+					Value: "57.",
+				},
+			},
+		},
+		{
 			Name:  "BasicOp",
-			Input: `(+ 1 -2)`,
+			Input: `(+ 1 234)`,
 			Output: []ScannedToken{
 				ScannedToken{
 					Typ:   OpenParenTT,
@@ -89,7 +112,7 @@ func Test_TokenizeString(t *testing.T) {
 				},
 				ScannedToken{
 					Typ:   NumberTT,
-					Value: "-2",
+					Value: "234",
 				},
 				ScannedToken{
 					Typ:   CloseParenTT,
@@ -106,14 +129,39 @@ func Test_TokenizeString(t *testing.T) {
 					Value: `"abc efg"`,
 				},
 			},
-			Disabled: true,
+		},
+		{
+			Name:  "ident",
+			Input: `(let x 5)`,
+			Output: []ScannedToken{
+				ScannedToken{
+					Typ:   OpenParenTT,
+					Value: "(",
+				},
+				ScannedToken{
+					Typ:   IdentTT,
+					Value: "let",
+				},
+				ScannedToken{
+					Typ:   IdentTT,
+					Value: "x",
+				},
+				ScannedToken{
+					Typ:   NumberTT,
+					Value: "5",
+				},
+				ScannedToken{
+					Typ:   CloseParenTT,
+					Value: ")",
+				},
+			},
 		},
 	}
 
 	for _, c := range testCases {
 		t.Run(c.Name, func(t *testing.T) {
 			if c.Disabled {
-				t.Skip("test marked as skipped")
+				t.Skip()
 			}
 
 			tokens := TokenizeString(c.Input)
@@ -140,5 +188,16 @@ func Test_TokenizeString(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func Test_abc(t *testing.T) {
+	r := strings.NewReader("abcdef")
+	var _ = r.Read
+	buf := bufio.NewReader(r)
+	for i := 0; i < 10; i++ {
+		r, n, e := buf.ReadRune()
+		var _ = r
+		fmt.Println("@@@ values:", n, e)
 	}
 }

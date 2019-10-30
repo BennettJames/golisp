@@ -1,226 +1,377 @@
 package golisp2
 
 import (
+	"strings"
 	"unicode"
 )
-
-// note (bs): probably will eventually want to turn this into a token scanner,
-// rather than a monolithic parser.
 
 // TokenizeString converts the provided string to a list of tokens.
 func TokenizeString(str string) []ScannedToken {
 	tokens := []ScannedToken{}
 
-	cs := NewCharScanner(str)
-	for !cs.Done() {
-		next := nextToken(cs)
-		if next != nil {
-			tokens = append(tokens, *next)
+	cs := NewRuneScanner(strings.NewReader(str))
+	ts := NewTokenScanner(cs)
+	for !ts.Done() {
+		nextT := ts.Next()
+		if nextT == nil {
+			break
+		}
+		tokens = append(tokens, *nextT)
+		if nextT.Typ == InvalidTT {
+			break
 		}
 	}
 	return tokens
 }
 
-func nextToken(cs *CharScanner) *ScannedToken {
-	for {
-		for peekIsSpace(cs) {
-			// note (bs): consider still supporting whitespace as an explicit token
-			// type. For the most part it doesn't really matter, but arguably newlines
-			// in particular are important for "reconstituting" a function.
-			cs.Next()
-		}
-		peekC, peekOk := cs.Peek()
-		if !peekOk {
-			return nil
-		}
+type (
+	// TokenScanner reads over an input source of characters, transforming them
+	// into tokens.
+	TokenScanner struct {
+		st *subTokenScanner
+	}
 
-		// note (bs): again; don't think this is good design; just a place to start.
-		switch peekC {
-		case '(':
-			return parseOpenParen(cs)
-		case ')':
-			return parseClosedParen(cs)
-		case '0', '1', '2', '3', '4', '5', '6', '7', '8', '9':
-			return parseNumberToken(cs)
-		case '"':
-			return parseStringToken(cs)
-		case '-', '+', '/', '*', '&', '^', '%', '!', '|', '<', '>', '=':
-			return parseOpToken(cs)
+	// subTokenScanner is a private substructure for TokenScanner that does most
+	// of the work. It's responsible for buffering in-progress tokens.
+	subTokenScanner struct {
+		src *RuneScanner
+		buf []byte
+	}
+)
 
-		default:
-			// let's just lazily scan in an ident if it's anything else. That's not
-			// even strictly correct; just trying to hustle along for a bit
-			return parseIdentToken(cs)
-		}
+// NewTokenScanner creates a new TokenScanner around the provided source.
+func NewTokenScanner(src *RuneScanner) *TokenScanner {
+	return &TokenScanner{
+		st: newSubTokenScanner(src),
 	}
 }
 
-func parseOpenParen(cs *CharScanner) *ScannedToken {
-	nextC, nextOk := cs.Next()
-	if !nextOk || nextC != '(' {
-		return nil
+// Done indicates if the underlying source has been exhausted, with no more
+// values to read.
+func (ts *TokenScanner) Done() bool {
+	return ts.st.Done()
+}
+
+func (ts *TokenScanner) Err() error {
+	return ts.st.src.Err()
+}
+
+// Next will read in from the source until a new token is discovered. If the
+// source is empty, returns nil.
+func (ts *TokenScanner) Next() *ScannedToken {
+	return scanNextToken(ts.st)
+}
+
+func newSubTokenScanner(src *RuneScanner) *subTokenScanner {
+	return &subTokenScanner{
+		src: src,
 	}
+}
+
+func (ss *subTokenScanner) Done() bool {
+	// note (bs): not *quite* sure yet if this is correct, but o.k. for now.
+	// Particularly, what if the underlying stream is done but there's still a
+	// token prepped for grabbing? Need to make sure that I neither double-process
+	// or skip the last rune.
+	return ss.src.Done()
+}
+
+// Rune returns the current rune being scanned.
+func (ss *subTokenScanner) Rune() rune {
+	return ss.src.Rune()
+}
+
+// Advance adds the current rune to the buffer, and moves to the next step.
+func (ss *subTokenScanner) Advance() {
+	if ss.src.Done() {
+		return
+	}
+	ss.buf = append(ss.buf, []byte(string(ss.src.Rune()))...)
+	ss.src.Advance()
+}
+
+// Skip will advance to the next rune, but without including it in the buffer.
+func (ss *subTokenScanner) Skip() {
+	if ss.src.Done() {
+		return
+	}
+	ss.src.Advance()
+}
+
+// Complete drains the buffer and returns a token consisting of the type and the
+// buffer as the value.
+func (ss *subTokenScanner) Complete(t TokenType) *ScannedToken {
+	val := string(ss.buf)
+	ss.buf = nil
 	return &ScannedToken{
-		Typ:   OpenParenTT,
-		Value: "(",
+		Typ:   t,
+		Value: val,
 	}
 }
 
-func parseClosedParen(cs *CharScanner) *ScannedToken {
-	nextC, nextOk := cs.Next()
-	if !nextOk || nextC != ')' {
-		return nil
-	}
-	return &ScannedToken{
-		Typ:   CloseParenTT,
-		Value: ")",
-	}
-}
-
-// a note on parsers here: they all can return invalid tokens or nil. Not sure
-// about returning nil here, to be honest - seems like it only happens if the
-// scan unexpectedly stops, but that in of itself would be... wrong. Oh well.
-
-func parseNumberToken(cs *CharScanner) *ScannedToken {
-	numStr := ""
-	for {
-		peekC, peekOk := cs.Peek()
-		if !peekOk || runeIsBoundary(peekC) {
-			break
-		}
-		if !unicode.IsDigit(peekC) && peekC != '.' {
-			return &ScannedToken{
-				Typ:   InvalidTT,
-				Value: numStr,
-			}
-		}
-		numStr += string(peekC)
-		cs.Next()
-	}
-
-	// note (bs): this would allow some numbers like "123." through. I don't think
-	// I want to allow that. Should it be forbidden here? Maybe. I'd say let it go
-	// for now, but I'd like to review some samples and come back to this whole
-	// section and likely make the underlying scanner a bit better and make it all
-	// a little more state-machine-y. I think the right way to view that is by
-	// having a more stepped approach to the parse logic, wherein certain
-	// "terminal" characters will return invalid if they're the final parse rather
-	// than
+func scanNextToken(s *subTokenScanner) *ScannedToken {
+	// Removed any leading whitespace
 	//
-	// yeah, let's try to do that. This parsing o.k. for getting started, but it's
-	// pretty clumsy. Id' also rather not coast on a post-hoc check w/ golang for
-	// this one; outsourcing my parsing feels like cheating.
-
-	if len(numStr) == 0 {
+	// note (bs): not sure the handling of null bytes here is really correct
+	for !s.src.Done() && (s.src.Rune() == '\x00' || unicode.IsSpace(s.src.Rune())) {
+		s.src.Advance()
+	}
+	if s.src.Done() {
 		return nil
 	}
 
-	return &ScannedToken{
-		Typ:   NumberTT,
-		Value: numStr,
+	// note (bs): this is kinda inefficient - if you hoisted the initial chars,
+	// you could always map to the next function. Oh well.
+	tryParsers := []func(*subTokenScanner) *ScannedToken{
+		tryParseOpenParen,
+		tryParseCloseParen,
+		tryParseSignedValue,
+		tryParseOperator,
+		tryParseNumber,
+		tryParseString,
+		tryParseIdent,
 	}
+
+	for _, p := range tryParsers {
+		if t := p(s); t != nil {
+			return t
+		}
+	}
+
+	return s.Complete(InvalidTT)
 }
 
-func parseOpToken(cs *CharScanner) *ScannedToken {
-	// note (bs): I sorta feel like "batching" the read and ok for the scanner
-	// ended up not working in my favor. Might make more sense to have the more
-	// traditional model wherein the scanner has a simple "done" value that I can
-	// read, and I can call advance (no return), next (one head), and peek (two
-	// ahead) individually. Oh well; I'd say still scratch together some basic
-	// token parsing here even if it's trash; then go back and make "CharScanner2"
-	// if you are so inclined.
-	//
-	// Yeah, let's do something here. The current design feels like a very awkward
-	// imposition of the for loop; I don't think I'll have to struggle to long to
-	// get something that fits a little more naturally into Go iteration.
+func tryParseOpenParen(s *subTokenScanner) *ScannedToken {
+	if s.Rune() == '(' {
+		s.Advance()
+		return s.Complete(OpenParenTT)
+	}
+	return nil
+}
 
-	// note (bs): it's technically possible for this to return a number type in
-	// the case of '-'
-	opStr := "" // note (bs): would be marginally better if this was a string builder
+func tryParseCloseParen(s *subTokenScanner) *ScannedToken {
+	if s.Rune() == ')' {
+		s.Advance()
+		return s.Complete(CloseParenTT)
+	}
+	return nil
+}
+
+func tryParseSignedValue(s *subTokenScanner) *ScannedToken {
+	if s.Rune() != '-' {
+		return nil
+	}
+	s.Advance()
+	if scannerAtDigit(s) {
+		s.Advance()
+		return parseNumber(s)
+	}
+	return parseOperator(s)
+}
+
+func tryParseOperator(s *subTokenScanner) *ScannedToken {
+	if scannerAtOperator(s) {
+		s.Advance()
+		return parseOperator(s)
+	}
+	return nil
+}
+
+func parseOperator(s *subTokenScanner) *ScannedToken {
 	for {
-		peekC, peekOk := cs.Peek()
-		if !peekOk || runeIsBoundary(peekC) {
-			break
+		if scannerAtOperator(s) {
+			s.Advance()
+			continue
+		}
+		if scannerAtBoundary(s) {
+			return s.Complete(OpTT)
+		}
+		s.Advance()
+		return s.Complete(InvalidTT)
+	}
+}
+
+func tryParseNumber(s *subTokenScanner) *ScannedToken {
+	// note (bs): just does nonnegative integers right now; not very
+	// sophisticated.
+	if scannerAtDigit(s) {
+		s.Advance()
+		return parseNumber(s)
+	}
+	return nil
+}
+
+func parseNumber(s *subTokenScanner) *ScannedToken {
+	// note (bs): this still isn't *great* as far as division of responsibilities
+	// is concerned. May want a somewhat easier way to do things like specify a
+	// minimum number of digits to parse in a pass.
+	for {
+		if scannerAtDigit(s) {
+			s.Advance()
+			continue
 		}
 
-		if unicode.IsDigit(peekC) {
-			if opStr == "-" {
-				numToken := parseNumberToken(cs)
-				if numToken != nil {
-					return &ScannedToken{
-						Typ:   numToken.Typ,
-						Value: opStr + numToken.Value,
-					}
-				}
+		// note (bs): this isn't technically correct, as it could tolerate multiple
+		// decimal points. Need to subdivide further for this to be right.
+		if scannerAtDecimal(s) {
+			s.Advance()
+			if scannerAtDigit(s) {
+				s.Advance()
+				continue
 			}
-			return &ScannedToken{
-				Typ:   InvalidTT,
-				Value: opStr + string(peekC),
-			}
+			return s.Complete(InvalidTT)
 		}
-		if !runeIsOp(peekC) {
-			return &ScannedToken{
-				Typ:   InvalidTT,
-				Value: opStr + string(peekC),
-			}
+
+		if scannerAtBoundary(s) {
+			return s.Complete(NumberTT)
 		}
-		opStr += string(peekC)
-
-		cs.Next()
-	}
-
-	if len(opStr) == 0 {
-		// the existence of this, among other things, makes me kinda doubt whether
-		// my design here is any good
-		return nil
-	}
-
-	return &ScannedToken{
-		Typ:   OpTT,
-		Value: opStr,
+		return s.Complete(InvalidTT)
 	}
 }
 
-func parseStringToken(cs *CharScanner) *ScannedToken {
-	// fixme
-	nextC, nextOk := cs.Next()
-	var _, _ = nextC, nextOk
+func tryParseString(s *subTokenScanner) *ScannedToken {
+	if scannerAtDoubleQuote(s) {
+		s.Advance()
+		return parseString(s)
+	}
+	return nil
+}
 
-	return &ScannedToken{
-		Typ: InvalidTT,
+func parseString(s *subTokenScanner) *ScannedToken {
+	for {
+		if s.Done() || scannerAtNewline(s) {
+			return s.Complete(InvalidTT)
+		}
+
+		if scannerAtDoubleQuote(s) {
+			s.Advance()
+			if scannerAtBoundary(s) {
+				return s.Complete(StringTT)
+			}
+			return s.Complete(InvalidTT)
+		}
+
+		// todo (bs): need to process escaped characters here. That will require a
+		// bit of an API shift: the tokenization process will need to
+		//
+		// I suspect that this whole process should be replaced by some better
+		// sub-tokenization for each top-level element. I'd guess at that point,
+		// finer-grained sub-parsing like that would be more appropriate. Right now,
+		// the tokenization is very crude; and doesn't distinguish quotes from the
+		// rest of the inner elements.
+
+		s.Advance()
 	}
 }
 
-func parseIdentToken(cs *CharScanner) *ScannedToken {
-	nextC, nextOk := cs.Next()
-	var _, _ = nextC, nextOk
+func tryParseIdent(s *subTokenScanner) *ScannedToken {
+	if scannerAtIdentStart(s) {
+		s.Advance()
+		return parseIdent(s)
+	}
+	return nil
+}
 
-	return &ScannedToken{
-		Typ: InvalidTT,
+func parseIdent(s *subTokenScanner) *ScannedToken {
+	for {
+		if scannerAtBoundary(s) {
+			return s.Complete(IdentTT)
+		}
+		if scannerAtIdent(s) {
+			s.Advance()
+			continue
+		}
+		s.Advance()
+		return s.Complete(InvalidTT)
 	}
 }
 
-func peekIsBoundary(cs *CharScanner) bool {
-	peekC, peekOk := cs.Peek()
-	return !peekOk || runeIsBoundary(peekC)
+func scannerAtBoundary(s *subTokenScanner) bool {
+	return s.Done() ||
+		scannerAtSpace(s) ||
+		scannerAtOpenParen(s) ||
+		scannerAtCloseParen(s)
 }
 
-func peekIsSpace(cs *CharScanner) bool {
-	peekC, peekOk := cs.Peek()
-	return peekOk && unicode.IsSpace(peekC)
+func scannerAtDigit(s *subTokenScanner) bool {
+	if s.Done() {
+		return false
+	}
+	switch s.Rune() {
+	case '0', '1', '2', '3', '4', '5', '6', '7', '8', '9':
+		return true
+	default:
+		return false
+	}
 }
 
-func runeIsBoundary(r rune) bool {
-	return unicode.IsSpace(r) ||
-		r == '(' ||
-		r == ')'
-}
-
-func runeIsOp(r rune) bool {
-	switch r {
+func scannerAtOperator(s *subTokenScanner) bool {
+	if s.Done() {
+		return false
+	}
+	switch s.Rune() {
 	case '-', '+', '/', '*', '&', '^', '%', '!', '|', '<', '>', '=':
 		return true
 	default:
 		return false
 	}
+}
+
+func scannerAtDecimal(s *subTokenScanner) bool {
+	if s.Done() {
+		return false
+	}
+	return s.Rune() == '.'
+}
+
+func scannerAtSpace(s *subTokenScanner) bool {
+	if s.Done() {
+		return false
+	}
+	return unicode.IsSpace(s.Rune())
+}
+
+func scannerAtOpenParen(s *subTokenScanner) bool {
+	if s.Done() {
+		return false
+	}
+	return s.Rune() == '('
+}
+
+func scannerAtCloseParen(s *subTokenScanner) bool {
+	if s.Done() {
+		return false
+	}
+	return s.Rune() == ')'
+}
+
+func scannerAtDoubleQuote(s *subTokenScanner) bool {
+	if s.Done() {
+		return false
+	}
+	return s.Rune() == '"'
+}
+
+func scannerAtNewline(s *subTokenScanner) bool {
+	if s.Done() {
+		return false
+	}
+	return s.Rune() == '\n'
+}
+
+func scannerAtIdentStart(s *subTokenScanner) bool {
+	if s.Done() {
+		return false
+	}
+	// note (bs): not sure if this adequate/correct; but will probably be o.k. to
+	// start
+	return unicode.IsLetter(s.Rune())
+}
+
+func scannerAtIdent(s *subTokenScanner) bool {
+	if s.Done() {
+		return false
+	}
+	return scannerAtIdentStart(s) ||
+		unicode.IsDigit(s.Rune())
 }
