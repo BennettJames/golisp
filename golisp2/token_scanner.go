@@ -52,6 +52,8 @@ func (ts *TokenScanner) Done() bool {
 	return ts.st.Done()
 }
 
+// Err returns any error encountered while scanning the input. Will be io.EOF if
+// the scan completed the input.
 func (ts *TokenScanner) Err() error {
 	return ts.st.src.Err()
 }

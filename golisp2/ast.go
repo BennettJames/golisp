@@ -9,13 +9,14 @@ type (
 	// Expr is the fundamental unit of lisp - it represents anything that can be
 	// evaluated to a value.
 	Expr interface {
-		Eval(ExprContext) Value
+		Eval(*ExprContext) Value
 	}
 
 	// ExprContext is the context on evaluation. It contains a resolvable set of
 	// identifiers->values that can be chained.
 	ExprContext struct {
-		vals map[string]Value
+		parent *ExprContext
+		vals   map[string]Value
 	}
 
 	// Value represents any arbitrary value within the lisp interpreting
@@ -26,6 +27,16 @@ type (
 		// PrintStr returns a printable version of the value. Note that this is not
 		// the same as casting to a string.
 		PrintStr() string
+	}
+
+	// IdentValue is a representation of an identifier in the interpreted
+	// environment, whose value is resolved by the context it is evaluated in.
+	IdentValue struct {
+		// note (bs): I'd like to eventually make it so that identifiers could be
+		// "compound lookups"; e.g. "Foo.Bar.A"; in which case I think this should
+		// not just be a string. Arguably, that should have it's own datatype
+		// anyway.
+		ident string
 	}
 
 	// NumberValue is a representation of a number value within the interpreted
@@ -57,7 +68,7 @@ type (
 		// ques (bs): should this basic function type exist outside of this context?
 		// Maybe.
 
-		fn func(ExprContext, ...Expr) (Value, error)
+		fn func(*ExprContext, ...Expr) (Value, error)
 	}
 
 	// CellValue is a representation of a pair of values within the interpreted
@@ -66,132 +77,187 @@ type (
 	CellValue struct {
 		left, right Value
 	}
-
-	// ques (bs): what other primitives, if any, do I want to add here? I'd like
-	// to have maps, preferably with raw syntax support, and perhaps more
-	// conventional vectors. Typed vectors would be great, but require types
-	// before becoming practical.
-
 )
 
+// Resolve traverses the expr for the given ident. Will return it if found;
+// otherwise a nil value and "false".
+func (ec *ExprContext) Resolve(ident string) (Value, bool) {
+	if ec == nil {
+		return NewNilValue(), false
+	}
+	if v, ok := ec.vals[ident]; ok {
+		return v, true
+	}
+	return ec.parent.Resolve(ident)
+}
+
+// NewIdentValue instantiates a new identifier value with the given identifier
+// token.
+func NewIdentValue(ident string) *IdentValue {
+	return &IdentValue{
+		ident: ident,
+	}
+}
+
+// PrintStr will output the name of the identifier.
+func (nv *IdentValue) PrintStr() string {
+	return fmt.Sprintf("'%s'", nv.ident)
+}
+
+// Eval will traverse the context for the identifier and return nil if the value
+// is not defined.
+//
+// todo (bs): consider making failed resolution an error. In this case, it
+// should be a "severe error" that bubbles back and most likely halts execution.
+// It's *possible* the right way to handle that is by creating a modified value
+// interface that can directly support the notion of error.
+func (nv *IdentValue) Eval(ec *ExprContext) Value {
+	v, ok := ec.Resolve(nv.ident)
+	if !ok {
+		return NewNilValue()
+	}
+	return v
+}
+
+// NewNumberValue instantiates a new number with the given value.
 func NewNumberValue(v float64) *NumberValue {
 	return &NumberValue{
 		val: v,
 	}
 }
 
+// PrintStr prints the number.
 func (nv *NumberValue) PrintStr() string {
 	return fmt.Sprintf("%f", nv.val)
 }
 
-func (nv *NumberValue) Eval(ExprContext) Value {
+// Eval just returns itself.
+func (nv *NumberValue) Eval(*ExprContext) Value {
 	return nv
 }
 
+// Get just returns the underlying number.
 func (nv *NumberValue) Get() float64 {
 	return nv.val
 }
 
+// NewNilValue creates a new nil value.
+//
+// todo (bs): this should return a singleton; no need for duplcates given that
+// it's unmodifiable.
 func NewNilValue() *NilValue {
-	// note (bs): given that there are no values here to modify, consider using a
-	// singleton here
 	return &NilValue{}
 }
 
+// PrintStr outputs "nil".
 func (nv *NilValue) PrintStr() string {
 	return "nil"
 }
 
-func (nv *NilValue) Eval(ExprContext) Value {
+// Eval returns the nil value.
+func (nv *NilValue) Eval(*ExprContext) Value {
 	// note (bs): not sure about this. In general, I feel like eval needs to be
 	// more intelligent
 	return nv
 }
 
-func (nv *NilValue) Get() interface{} {
-	return nil
-}
-
+// NewStringValue creates a new string value from the given string.
 func NewStringValue(str string) *StringValue {
 	return &StringValue{
 		val: str,
 	}
 }
 
+// PrintStr prints the string.
 func (nv *StringValue) PrintStr() string {
-	return nv.val
+	return fmt.Sprintf("\"%s\"", nv.val)
 }
 
-func (nv *StringValue) Eval(ExprContext) Value {
+// Eval returns the string value.
+func (nv *StringValue) Eval(*ExprContext) Value {
 	return nv
 }
 
+// Get returns the raw string value.
 func (nv *StringValue) Get() string {
 	return nv.val
 }
 
+// NewBoolValue creates a bool with the given value.
+//
+// todo (bs): this probably should return singletons for true/false
 func NewBoolValue(v bool) *BoolValue {
-	// todo (bs): consider making this return singleton values
 	return &BoolValue{
 		val: v,
 	}
 }
 
+// PrintStr prints "true"/"false" based on the value.
 func (nv *BoolValue) PrintStr() string {
 	return fmt.Sprintf("%t", nv.val)
 }
 
-func (nv *BoolValue) Eval(ExprContext) Value {
+// Eval returns the bool value.
+func (nv *BoolValue) Eval(*ExprContext) Value {
 	return nv
 }
 
+// Get returns the raw bool value.
 func (nv *BoolValue) Get() bool {
 	return nv.val
 }
 
-func NewFuncValue(fn func(ExprContext, ...Expr) (Value, error)) *FuncValue {
+// NewFuncValue creates a function with the given value.
+func NewFuncValue(fn func(*ExprContext, ...Expr) (Value, error)) *FuncValue {
 	return &FuncValue{
 		fn: fn,
 	}
 }
 
+// PrintStr outputs some information about the function.
 func (nv *FuncValue) PrintStr() string {
 	// note (bs): probably want to customize this to print some details about the
 	// function itself
 	return fmt.Sprintf("<func>")
 }
 
-func (nv *FuncValue) Eval(ExprContext) Value {
+// Eval evaluates the function using the provided context.
+func (nv *FuncValue) Eval(ec *ExprContext) Value {
 	return nv
 }
 
-func (nv *FuncValue) Get() func(ExprContext, ...Expr) (Value, error) {
+// Get returns the function value.
+func (nv *FuncValue) Get() func(*ExprContext, ...Expr) (Value, error) {
 	return nv.fn
 }
 
+// NewCellValue creates a cell with the given left/right values. Either can be
+// 'nil'.
 func NewCellValue(left, right Value) *CellValue {
+	if left == nil {
+		left = NewNilValue()
+	}
+	if right == nil {
+		right = NewNilValue()
+	}
 	return &CellValue{
 		left:  left,
 		right: right,
 	}
 }
 
+// PrintStr outputs the contents of all the cells.
 func (nv *CellValue) PrintStr() string {
-	l, r := nv.left, nv.right
-	if l == nil {
-		l = NewNilValue()
-	}
-	if r == nil {
-		r = NewNilValue()
-	}
 	// todo (bs): if second cell is a node, treat this different
-	return fmt.Sprintf("(%s . %s)", l.PrintStr(), r.PrintStr())
+	return fmt.Sprintf("(%s . %s)", nv.left.PrintStr(), nv.right.PrintStr())
 }
 
-func (nv *CellValue) Eval(ExprContext) Value {
+// Eval returns the cell.
+func (nv *CellValue) Eval(*ExprContext) Value {
 	return nv
 }
 
+// Get returns the cell values.
 func (nv *CellValue) Get() (left, right Value) {
 	return nv.left, nv.right
 }
@@ -200,7 +266,7 @@ func (nv *CellValue) Get() (left, right Value) {
 // likely exist in a separate file. Let's worry about that later: I think
 // packages should be broken up and all this should be moved out.
 
-func addFn(c ExprContext, exprs ...Expr) (Value, error) {
+func addFn(c *ExprContext, exprs ...Expr) (Value, error) {
 	total := float64(0)
 	for _, e := range exprs {
 		v := e.Eval(c)
@@ -217,7 +283,7 @@ func addFn(c ExprContext, exprs ...Expr) (Value, error) {
 	}, nil
 }
 
-func subFn(c ExprContext, exprs ...Expr) (Value, error) {
+func subFn(c *ExprContext, exprs ...Expr) (Value, error) {
 	// ques (bs): should I still enforce minimum airity requirements here? I'm
 	// sorta inclined to say yes; but not sure how much I care about that right
 	// now. Particularly: that seems to get into deeper questions of type
@@ -248,7 +314,7 @@ func subFn(c ExprContext, exprs ...Expr) (Value, error) {
 	}, nil
 }
 
-func concatFn(c ExprContext, exprs ...Expr) (Value, error) {
+func concatFn(c *ExprContext, exprs ...Expr) (Value, error) {
 	var sb strings.Builder
 	for _, e := range exprs {
 		v := e.Eval(c)
@@ -263,7 +329,7 @@ func concatFn(c ExprContext, exprs ...Expr) (Value, error) {
 	}, nil
 }
 
-func consFn(c ExprContext, exprs ...Expr) (Value, error) {
+func consFn(c *ExprContext, exprs ...Expr) (Value, error) {
 	if len(exprs) > 2 {
 		return nil, fmt.Errorf("cons expects 0-2 argument; got %d", len(exprs))
 	}
@@ -272,7 +338,7 @@ func consFn(c ExprContext, exprs ...Expr) (Value, error) {
 	return NewCellValue(v1, v2), nil
 }
 
-func carFn(c ExprContext, exprs ...Expr) (Value, error) {
+func carFn(c *ExprContext, exprs ...Expr) (Value, error) {
 	if len(exprs) != 1 {
 		return nil, fmt.Errorf("car expects 1 argument; got %d", len(exprs))
 	}
@@ -287,7 +353,7 @@ func carFn(c ExprContext, exprs ...Expr) (Value, error) {
 	return leftV, nil
 }
 
-func cdrFn(c ExprContext, exprs ...Expr) (Value, error) {
+func cdrFn(c *ExprContext, exprs ...Expr) (Value, error) {
 	if len(exprs) != 1 {
 		return nil, fmt.Errorf("cdr expects 1 argument; got %d", len(exprs))
 	}
@@ -300,7 +366,7 @@ func cdrFn(c ExprContext, exprs ...Expr) (Value, error) {
 	return rightV, nil
 }
 
-func andFn(c ExprContext, exprs ...Expr) (Value, error) {
+func andFn(c *ExprContext, exprs ...Expr) (Value, error) {
 	if len(exprs) == 0 {
 		return nil, fmt.Errorf("and expects at least 1 argument; got %d", len(exprs))
 	}
@@ -316,7 +382,7 @@ func andFn(c ExprContext, exprs ...Expr) (Value, error) {
 	return NewBoolValue(total), nil
 }
 
-func orFn(c ExprContext, exprs ...Expr) (Value, error) {
+func orFn(c *ExprContext, exprs ...Expr) (Value, error) {
 	if len(exprs) == 0 {
 		return nil, fmt.Errorf("or expects at least 1 argument; got %d", len(exprs))
 	}
@@ -332,7 +398,7 @@ func orFn(c ExprContext, exprs ...Expr) (Value, error) {
 	return NewBoolValue(total), nil
 }
 
-func notFn(c ExprContext, exprs ...Expr) (Value, error) {
+func notFn(c *ExprContext, exprs ...Expr) (Value, error) {
 	if len(exprs) != 1 {
 		return nil, fmt.Errorf("not expects 1 argument; got %d", len(exprs))
 	}

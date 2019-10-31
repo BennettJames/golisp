@@ -1,9 +1,6 @@
 package golisp2
 
 import (
-	"bufio"
-	"fmt"
-	"strings"
 	"testing"
 )
 
@@ -188,16 +185,5 @@ func Test_TokenizeString(t *testing.T) {
 				}
 			}
 		})
-	}
-}
-
-func Test_abc(t *testing.T) {
-	r := strings.NewReader("abcdef")
-	var _ = r.Read
-	buf := bufio.NewReader(r)
-	for i := 0; i < 10; i++ {
-		r, n, e := buf.ReadRune()
-		var _ = r
-		fmt.Println("@@@ values:", n, e)
 	}
 }

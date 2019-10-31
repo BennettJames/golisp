@@ -8,7 +8,7 @@ import (
 
 func Test_add(t *testing.T) {
 	v, e := addFn(
-		ExprContext{},
+		&ExprContext{},
 		NewNumberValue(1),
 		NewNumberValue(2),
 	)
@@ -18,7 +18,7 @@ func Test_add(t *testing.T) {
 
 func Test_sub(t *testing.T) {
 	v, e := subFn(
-		ExprContext{},
+		&ExprContext{},
 		NewNumberValue(2),
 		NewNumberValue(1),
 	)
@@ -28,7 +28,7 @@ func Test_sub(t *testing.T) {
 
 func Test_concat(t *testing.T) {
 	v, e := concatFn(
-		ExprContext{},
+		&ExprContext{},
 		NewStringValue("abc"),
 		NewStringValue("efg"),
 	)
@@ -38,26 +38,26 @@ func Test_concat(t *testing.T) {
 
 func Test_cell(t *testing.T) {
 	v, e := consFn(
-		ExprContext{},
-		NewNumberValue(1),
-		NewNumberValue(2),
+		&ExprContext{},
+		NewStringValue("a"),
+		NewStringValue("b"),
 	)
 	require.NoError(t, e)
 	assertAsCell(t, v)
 
 	left, leftErr := carFn(
-		ExprContext{},
+		&ExprContext{},
 		v,
 	)
 	right, rightErr := cdrFn(
-		ExprContext{},
+		&ExprContext{},
 		v,
 	)
 	require.NoError(t, leftErr)
 	require.NoError(t, rightErr)
-	assertNumValue(t, left, 1)
-	assertNumValue(t, right, 2)
-	require.Equal(t, "(1 . 2)", v.PrintStr())
+	assertStringValue(t, left, "a")
+	assertStringValue(t, right, "b")
+	require.Equal(t, "(\"a\" . \"b\")", v.PrintStr())
 }
 
 func Test_bool(t *testing.T) {
@@ -68,7 +68,7 @@ func Test_bool(t *testing.T) {
 
 	t.Run("and", func(t *testing.T) {
 		v1, e1 := andFn(
-			ExprContext{},
+			&ExprContext{},
 			NewBoolValue(true),
 			NewBoolValue(true),
 		)
@@ -76,7 +76,7 @@ func Test_bool(t *testing.T) {
 		assertBoolValue(t, v1, true)
 
 		v2, e2 := andFn(
-			ExprContext{},
+			&ExprContext{},
 			NewBoolValue(true),
 			NewBoolValue(false),
 		)
@@ -86,7 +86,7 @@ func Test_bool(t *testing.T) {
 
 	t.Run("or", func(t *testing.T) {
 		v1, e1 := orFn(
-			ExprContext{},
+			&ExprContext{},
 			NewBoolValue(true),
 			NewBoolValue(false),
 		)
@@ -94,7 +94,7 @@ func Test_bool(t *testing.T) {
 		assertBoolValue(t, v1, true)
 
 		v2, e2 := orFn(
-			ExprContext{},
+			&ExprContext{},
 			NewBoolValue(false),
 			NewBoolValue(false),
 			NewBoolValue(false),
@@ -105,17 +105,41 @@ func Test_bool(t *testing.T) {
 
 	t.Run("not", func(t *testing.T) {
 		v1, e1 := notFn(
-			ExprContext{},
+			&ExprContext{},
 			NewBoolValue(true),
 		)
 		require.NoError(t, e1)
 		assertBoolValue(t, v1, false)
 
 		v2, e2 := notFn(
-			ExprContext{},
+			&ExprContext{},
 			NewBoolValue(false),
 		)
 		require.NoError(t, e2)
 		assertBoolValue(t, v2, true)
 	})
+}
+
+func Test_ident(t *testing.T) {
+
+	ec := &ExprContext{
+		parent: &ExprContext{
+			vals: map[string]Value{
+				"a": NewStringValue("a"),
+			},
+		},
+		vals: map[string]Value{
+			"b": NewStringValue("b"),
+			"c": NewStringValue("c"),
+		},
+	}
+
+	v1 := NewIdentValue("a").Eval(ec)
+	assertStringValue(t, v1, "a")
+
+	v2 := NewIdentValue("b").Eval(ec)
+	assertStringValue(t, v2, "b")
+
+	v3 := NewIdentValue("d").Eval(ec)
+	assertNilValue(t, v3)
 }

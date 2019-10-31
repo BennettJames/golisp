@@ -19,6 +19,7 @@ func Test_RuneScanner(t *testing.T) {
 		'😊',
 	}
 	for i, expectedR := range expected {
+		rs.Advance()
 		if rs.Done() {
 			t.Fatal("unexpected end to scan")
 		}
@@ -26,8 +27,8 @@ func Test_RuneScanner(t *testing.T) {
 			t.Fatalf("scanner returned wrong value [index=%d] [expected=%s] [actual=%s]",
 				i, string(expectedR), string(rs.Rune()))
 		}
-		rs.Advance()
 	}
+	rs.Advance()
 	if !rs.Done() {
 		t.Fatal("scanner did not complete")
 	}

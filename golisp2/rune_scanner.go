@@ -45,6 +45,8 @@ func (rs *RuneScanner) Done() bool {
 	return rs.err != nil
 }
 
+// Err returns any error encountered during the scan. Will be io.EOF if the
+// scanner simply completed.
 func (rs *RuneScanner) Err() error {
 	return rs.err
 }
