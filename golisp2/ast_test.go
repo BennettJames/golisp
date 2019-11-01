@@ -324,10 +324,10 @@ func Test_fnExpr(t *testing.T) {
 	doubleAdd := NewFnExpr(
 		[]Arg{
 			Arg{
-				ident: "a",
+				Ident: "a",
 			},
 			Arg{
-				ident: "b",
+				Ident: "b",
 			},
 		},
 		[]Expr{
