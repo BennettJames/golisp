@@ -77,6 +77,24 @@ type (
 	CellValue struct {
 		left, right Value
 	}
+
+	CallExpr struct {
+		exprs []Expr
+	}
+
+	IfExpr struct {
+		cond         Expr
+		case1, case2 Expr
+	}
+
+	FnExpr struct {
+		args []Arg
+		body []Expr
+	}
+
+	Arg struct {
+		ident string
+	}
 )
 
 // Resolve traverses the expr for the given ident. Will return it if found;
@@ -231,6 +249,10 @@ func (nv *FuncValue) Get() func(*ExprContext, ...Expr) (Value, error) {
 	return nv.fn
 }
 
+func (nv *FuncValue) Exec(ec *ExprContext, exprs ...Expr) (Value, error) {
+	return nv.fn(ec, exprs...)
+}
+
 // NewCellValue creates a cell with the given left/right values. Either can be
 // 'nil'.
 func NewCellValue(left, right Value) *CellValue {
@@ -260,6 +282,101 @@ func (nv *CellValue) Eval(*ExprContext) Value {
 // Get returns the cell values.
 func (nv *CellValue) Get() (left, right Value) {
 	return nv.left, nv.right
+}
+
+func NewCallExpr(exprs ...Expr) *CallExpr {
+	return &CallExpr{
+		exprs: exprs,
+	}
+}
+
+func (pe *CallExpr) Eval(ec *ExprContext) Value {
+	if len(pe.exprs) == 0 {
+		return NewNilValue()
+	}
+
+	v1 := pe.exprs[0].Eval(ec)
+	asFn, isFn := v1.(*FuncValue)
+	if !isFn {
+		if len(pe.exprs) == 1 {
+			return v1
+		}
+		// fixme (bs): this needs to return an error. Again, either eval needs to be
+		// modified to explicitly return (value, error), or Value's
+		// signature/behavior needs to be modified to support the notion of an error.
+		return nil
+	}
+
+	value, err := asFn.Exec(ec, pe.exprs[1:]...)
+	var _ = err // fixme (bs): again, need to handle error passback
+	return value
+}
+
+func NewIfExpr(cond Expr, case1, case2 Expr) *IfExpr {
+	if case1 == nil {
+		case1 = NewNilValue()
+	}
+	if case2 == nil {
+		case2 = NewNilValue()
+	}
+	return &IfExpr{
+		cond:  cond,
+		case1: case1,
+		case2: case2,
+	}
+}
+
+func (ie *IfExpr) Eval(ec *ExprContext) Value {
+	condV := ie.cond.Eval(ec)
+	asBool, isBool := condV.(*BoolValue)
+	if !isBool {
+		// fixme (bs): this should return an error
+		return NewNilValue()
+	}
+	if asBool.Get() {
+		return ie.case1.Eval(ec)
+	}
+	return ie.case2.Eval(ec)
+}
+
+func NewFnExpr(args []Arg, body []Expr) *FnExpr {
+	return &FnExpr{
+		args: args,
+		body: body,
+	}
+}
+
+func (fe *FnExpr) Eval(parentEc *ExprContext) Value {
+	return NewFuncValue(func(
+		callEc *ExprContext,
+		callExprs ...Expr,
+	) (Value, error) {
+		evalEc := &ExprContext{
+			parent: parentEc,
+			vals:   map[string]Value{},
+		}
+
+		// note (bs): this is very strict; will eventually likely want the ability
+		// to specify things like optional args, varargs, and defaults. For now, the
+		// arity of a user-defined function is always exact.
+		if len(fe.args) != len(callExprs) {
+			return nil, fmt.Errorf("expected %d arguments in call; got %d",
+				len(fe.args), len(callExprs))
+		}
+		for i, arg := range fe.args {
+			v := callExprs[i].Eval(callEc)
+			evalEc.vals[arg.ident] = v
+		}
+
+		var evalV Value
+		for _, e := range fe.body {
+			evalV = e.Eval(evalEc)
+		}
+		if evalV == nil {
+			evalV = NewNilValue()
+		}
+		return evalV, nil
+	})
 }
 
 // note (bs): I'm o.k. with this for the immediate future, but functions should
@@ -309,6 +426,40 @@ func subFn(c *ExprContext, exprs ...Expr) (Value, error) {
 		}
 	}
 
+	return &NumberValue{
+		val: total,
+	}, nil
+}
+
+func multFn(c *ExprContext, exprs ...Expr) (Value, error) {
+	total := float64(1)
+	for _, e := range exprs {
+		v := e.Eval(c)
+		asNum, isNum := v.(*NumberValue)
+		if !isNum {
+			return nil, fmt.Errorf("non-number value in add: %v", asNum.PrintStr())
+		}
+		total *= asNum.Get()
+	}
+	return &NumberValue{
+		val: total,
+	}, nil
+}
+
+func divFn(c *ExprContext, exprs ...Expr) (Value, error) {
+	total := float64(1)
+	for i, e := range exprs {
+		v := e.Eval(c)
+		asNum, isNum := v.(*NumberValue)
+		if !isNum {
+			return nil, fmt.Errorf("non-number value in add: %v", asNum.PrintStr())
+		}
+		if i == 0 {
+			total = asNum.Get()
+		} else {
+			total /= asNum.Get()
+		}
+	}
 	return &NumberValue{
 		val: total,
 	}, nil
@@ -408,4 +559,89 @@ func notFn(c *ExprContext, exprs ...Expr) (Value, error) {
 		return nil, fmt.Errorf("not expects bool argument, got %v", v)
 	}
 	return NewBoolValue(!asBool.Get()), nil
+}
+
+func eqNumFn(ec *ExprContext, exprs ...Expr) (Value, error) {
+	if len(exprs) != 2 {
+		return nil, fmt.Errorf("eq expects 2 arguments; got %d", len(exprs))
+	}
+	v1 := exprs[0].Eval(ec)
+	v2 := exprs[1].Eval(ec)
+	v1AsNum, v1IsNum := v1.(*NumberValue)
+	v2AsNum, v2IsNum := v2.(*NumberValue)
+	if !v1IsNum {
+		return nil, fmt.Errorf("eq expects number arguments")
+	}
+	if !v2IsNum {
+		return nil, fmt.Errorf("eq expects number arguments")
+	}
+	return NewBoolValue(v1AsNum.Get() == v2AsNum.Get()), nil
+}
+
+func gtNumFn(ec *ExprContext, exprs ...Expr) (Value, error) {
+	if len(exprs) != 2 {
+		return nil, fmt.Errorf("gt expects 2 arguments; got %d", len(exprs))
+	}
+	v1 := exprs[0].Eval(ec)
+	v2 := exprs[1].Eval(ec)
+	v1AsNum, v1IsNum := v1.(*NumberValue)
+	v2AsNum, v2IsNum := v2.(*NumberValue)
+	if !v1IsNum {
+		return nil, fmt.Errorf("gt expects number arguments")
+	}
+	if !v2IsNum {
+		return nil, fmt.Errorf("gt expects number arguments")
+	}
+	return NewBoolValue(v1AsNum.Get() > v2AsNum.Get()), nil
+}
+
+func ltNumFn(ec *ExprContext, exprs ...Expr) (Value, error) {
+	if len(exprs) != 2 {
+		return nil, fmt.Errorf("lt expects 2 arguments; got %d", len(exprs))
+	}
+	v1 := exprs[0].Eval(ec)
+	v2 := exprs[1].Eval(ec)
+	v1AsNum, v1IsNum := v1.(*NumberValue)
+	v2AsNum, v2IsNum := v2.(*NumberValue)
+	if !v1IsNum {
+		return nil, fmt.Errorf("lt expects number arguments")
+	}
+	if !v2IsNum {
+		return nil, fmt.Errorf("lt expects number arguments")
+	}
+	return NewBoolValue(v1AsNum.Get() < v2AsNum.Get()), nil
+}
+
+func gteNumFn(ec *ExprContext, exprs ...Expr) (Value, error) {
+	if len(exprs) != 2 {
+		return nil, fmt.Errorf("gte expects 2 arguments; got %d", len(exprs))
+	}
+	v1 := exprs[0].Eval(ec)
+	v2 := exprs[1].Eval(ec)
+	v1AsNum, v1IsNum := v1.(*NumberValue)
+	v2AsNum, v2IsNum := v2.(*NumberValue)
+	if !v1IsNum {
+		return nil, fmt.Errorf("gte expects number arguments")
+	}
+	if !v2IsNum {
+		return nil, fmt.Errorf("gte expects number arguments")
+	}
+	return NewBoolValue(v1AsNum.Get() >= v2AsNum.Get()), nil
+}
+
+func lteNumFn(ec *ExprContext, exprs ...Expr) (Value, error) {
+	if len(exprs) != 2 {
+		return nil, fmt.Errorf("lte expects 2 arguments; got %d", len(exprs))
+	}
+	v1 := exprs[0].Eval(ec)
+	v2 := exprs[1].Eval(ec)
+	v1AsNum, v1IsNum := v1.(*NumberValue)
+	v2AsNum, v2IsNum := v2.(*NumberValue)
+	if !v1IsNum {
+		return nil, fmt.Errorf("lte expects number arguments")
+	}
+	if !v2IsNum {
+		return nil, fmt.Errorf("lte expects number arguments")
+	}
+	return NewBoolValue(v1AsNum.Get() <= v2AsNum.Get()), nil
 }
