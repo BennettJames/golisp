@@ -31,7 +31,7 @@ func concatFn(c *ExprContext, exprs ...Expr) (Value, error) {
 		if !isStr {
 			return nil, fmt.Errorf("non-number value in add: %v", v.InspectStr())
 		}
-		sb.WriteString(asStr.Get())
+		sb.WriteString(asStr.Val)
 	}
 	return &StringValue{
 		Val: sb.String(),
@@ -85,7 +85,7 @@ func andFn(c *ExprContext, exprs ...Expr) (Value, error) {
 			return nil, fmt.Errorf("and expects bool types, got %v", v)
 		}
 		// todo (bs): strongly consider short-circuiting this if false is returned
-		total = total && asBool.Get()
+		total = total && asBool.Val
 	}
 	return NewBoolValue(total), nil
 }
@@ -102,7 +102,7 @@ func orFn(c *ExprContext, exprs ...Expr) (Value, error) {
 			return nil, fmt.Errorf("or expects bool types, got %v", v)
 		}
 		// todo (bs): strongly consider short-circuiting this if true is returned
-		total = total || asBool.Get()
+		total = total || asBool.Val
 	}
 	return NewBoolValue(total), nil
 }
@@ -116,7 +116,7 @@ func notFn(c *ExprContext, exprs ...Expr) (Value, error) {
 	if !isBool {
 		return nil, fmt.Errorf("not expects bool argument, got %v", v)
 	}
-	return NewBoolValue(!asBool.Get()), nil
+	return NewBoolValue(!asBool.Val), nil
 }
 
 //
@@ -133,7 +133,7 @@ func addFn(c *ExprContext, exprs ...Expr) (Value, error) {
 			// portable, obvious, and a little more resilient to nil values.
 			return nil, fmt.Errorf("non-number value in add: %v", asNum.InspectStr())
 		}
-		total += asNum.Get()
+		total += asNum.Val
 	}
 	return &NumberValue{
 		Val: total,
@@ -160,9 +160,9 @@ func subFn(c *ExprContext, exprs ...Expr) (Value, error) {
 			return nil, fmt.Errorf("non-number value in add: %v", v.InspectStr())
 		}
 		if i == 0 {
-			total = asNum.Get()
+			total = asNum.Val
 		} else {
-			total -= asNum.Get()
+			total -= asNum.Val
 		}
 	}
 
@@ -179,7 +179,7 @@ func multFn(c *ExprContext, exprs ...Expr) (Value, error) {
 		if !isNum {
 			return nil, fmt.Errorf("non-number value in add: %v", asNum.InspectStr())
 		}
-		total *= asNum.Get()
+		total *= asNum.Val
 	}
 	return &NumberValue{
 		Val: total,
@@ -195,9 +195,9 @@ func divFn(c *ExprContext, exprs ...Expr) (Value, error) {
 			return nil, fmt.Errorf("non-number value in add: %v", asNum.InspectStr())
 		}
 		if i == 0 {
-			total = asNum.Get()
+			total = asNum.Val
 		} else {
-			total /= asNum.Get()
+			total /= asNum.Val
 		}
 	}
 	return &NumberValue{
@@ -223,7 +223,7 @@ func eqNumFn(ec *ExprContext, exprs ...Expr) (Value, error) {
 	if !v2IsNum {
 		return nil, fmt.Errorf("eq expects number arguments")
 	}
-	return NewBoolValue(v1AsNum.Get() == v2AsNum.Get()), nil
+	return NewBoolValue(v1AsNum.Val == v2AsNum.Val), nil
 }
 
 func gtNumFn(ec *ExprContext, exprs ...Expr) (Value, error) {
@@ -240,7 +240,7 @@ func gtNumFn(ec *ExprContext, exprs ...Expr) (Value, error) {
 	if !v2IsNum {
 		return nil, fmt.Errorf("gt expects number arguments")
 	}
-	return NewBoolValue(v1AsNum.Get() > v2AsNum.Get()), nil
+	return NewBoolValue(v1AsNum.Val > v2AsNum.Val), nil
 }
 
 func ltNumFn(ec *ExprContext, exprs ...Expr) (Value, error) {
@@ -257,7 +257,7 @@ func ltNumFn(ec *ExprContext, exprs ...Expr) (Value, error) {
 	if !v2IsNum {
 		return nil, fmt.Errorf("lt expects number arguments")
 	}
-	return NewBoolValue(v1AsNum.Get() < v2AsNum.Get()), nil
+	return NewBoolValue(v1AsNum.Val < v2AsNum.Val), nil
 }
 
 func gteNumFn(ec *ExprContext, exprs ...Expr) (Value, error) {
@@ -274,7 +274,7 @@ func gteNumFn(ec *ExprContext, exprs ...Expr) (Value, error) {
 	if !v2IsNum {
 		return nil, fmt.Errorf("gte expects number arguments")
 	}
-	return NewBoolValue(v1AsNum.Get() >= v2AsNum.Get()), nil
+	return NewBoolValue(v1AsNum.Val >= v2AsNum.Val), nil
 }
 
 func lteNumFn(ec *ExprContext, exprs ...Expr) (Value, error) {
@@ -291,5 +291,5 @@ func lteNumFn(ec *ExprContext, exprs ...Expr) (Value, error) {
 	if !v2IsNum {
 		return nil, fmt.Errorf("lte expects number arguments")
 	}
-	return NewBoolValue(v1AsNum.Get() <= v2AsNum.Get()), nil
+	return NewBoolValue(v1AsNum.Val <= v2AsNum.Val), nil
 }

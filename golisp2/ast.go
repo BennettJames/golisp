@@ -43,7 +43,7 @@ type (
 		// "compound lookups"; e.g. "Foo.Bar.A"; in which case I think this should
 		// not just be a string. Arguably, that should have it's own datatype
 		// anyway.
-		Str string
+		Val string
 	}
 
 	// NumberValue is a representation of a number value within the interpreted
@@ -159,13 +159,13 @@ func (ec *ExprContext) Resolve(ident string) (Value, bool) {
 // token.
 func NewIdentValue(ident string) *IdentValue {
 	return &IdentValue{
-		Str: ident,
+		Val: ident,
 	}
 }
 
 // InspectStr will output the name of the identifier.
 func (iv *IdentValue) InspectStr() string {
-	return fmt.Sprintf("'%s'", iv.Str)
+	return fmt.Sprintf("'%s'", iv.Val)
 }
 
 // Eval will traverse the context for the identifier and return nil if the value
@@ -176,21 +176,16 @@ func (iv *IdentValue) InspectStr() string {
 // It's *possible* the right way to handle that is by creating a modified value
 // interface that can directly support the notion of error.
 func (iv *IdentValue) Eval(ec *ExprContext) Value {
-	v, ok := ec.Resolve(iv.Str)
+	v, ok := ec.Resolve(iv.Val)
 	if !ok {
 		return NewNilValue()
 	}
 	return v
 }
 
-// Get just returns the underlying ident string.
-func (iv *IdentValue) Get() string {
-	return iv.Str
-}
-
 // CodeStr will return the code representation of the ident value.
 func (iv *IdentValue) CodeStr() string {
-	return iv.Str
+	return iv.Val
 }
 
 // NewNumberValue instantiates a new number with the given value.
@@ -208,11 +203,6 @@ func (nv *NumberValue) InspectStr() string {
 // Eval just returns itself.
 func (nv *NumberValue) Eval(*ExprContext) Value {
 	return nv
-}
-
-// Get just returns the underlying number.
-func (nv *NumberValue) Get() float64 {
-	return nv.Val
 }
 
 // CodeStr will return the code representation of the number value.
@@ -265,11 +255,6 @@ func (sv *StringValue) Eval(*ExprContext) Value {
 	return sv
 }
 
-// Get returns the raw string value.
-func (sv *StringValue) Get() string {
-	return sv.Val
-}
-
 // CodeStr will return the code representation of the string value.
 func (sv *StringValue) CodeStr() string {
 	// note (bs): this doesn't matter now as it's not supported, but just note
@@ -294,11 +279,6 @@ func (bv *BoolValue) InspectStr() string {
 // Eval returns the bool value.
 func (bv *BoolValue) Eval(*ExprContext) Value {
 	return bv
-}
-
-// Get returns the raw bool value.
-func (bv *BoolValue) Get() bool {
-	return bv.Val
 }
 
 // CodeStr will return the code representation of the boolean value.
@@ -330,11 +310,6 @@ func (fv *FuncValue) InspectStr() string {
 // Eval evaluates the function using the provided context.
 func (fv *FuncValue) Eval(ec *ExprContext) Value {
 	return fv
-}
-
-// Get returns the function value.
-func (fv *FuncValue) Get() func(*ExprContext, ...Expr) (Value, error) {
-	return fv.Fn
 }
 
 // Exec executes the underlying function with the given context and arguments.
@@ -410,11 +385,6 @@ func (ce *CallExpr) Eval(ec *ExprContext) Value {
 	return value
 }
 
-// Get returns the underlying set of expressions in the call.
-func (ce *CallExpr) Get() []Expr {
-	return ce.Exprs
-}
-
 // InspectStr returns a user-readable representation of the call expression.
 func (ce *CallExpr) InspectStr() string {
 	if len(ce.Exprs) == 0 {
@@ -462,7 +432,7 @@ func (ie *IfExpr) Eval(ec *ExprContext) Value {
 		// fixme (bs): this should return an error
 		return NewNilValue()
 	}
-	if asBool.Get() {
+	if asBool.Val {
 		return ie.Case1.Eval(ec)
 	}
 	return ie.Case2.Eval(ec)
@@ -567,7 +537,7 @@ func (fe *FnExpr) InspectStr() string {
 // Eval will assign the underlying value to the ident on the context, and return
 // the value.
 func (le *LetExpr) Eval(ec *ExprContext) Value {
-	identStr := le.Ident.Get()
+	identStr := le.Ident.Val
 	v := le.Value.Eval(ec)
 	ec.Add(identStr, v)
 	return v
@@ -575,10 +545,10 @@ func (le *LetExpr) Eval(ec *ExprContext) Value {
 
 // CodeStr will return the code representation of the let expression.
 func (le *LetExpr) CodeStr() string {
-	return fmt.Sprintf("(let %s %s)", le.Ident.Get(), le.Value.CodeStr())
+	return fmt.Sprintf("(let %s %s)", le.Ident.Val, le.Value.CodeStr())
 }
 
 // InspectStr returns a user-readable representation of the let expression.
 func (le *LetExpr) InspectStr() string {
-	return fmt.Sprintf("<assign \"%s\">", le.Ident.Str)
+	return fmt.Sprintf("<assign \"%s\">", le.Ident.Val)
 }

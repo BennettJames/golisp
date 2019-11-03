@@ -71,7 +71,7 @@ func parseCallExpr(ts *TokenScanner) (Expr, error) {
 				// send out a subparser to be responsible for handling built-ins/macros,
 				// but I'll worry about that later.
 				if asIdent, isIdent := exprs[0].(*IdentValue); isIdent {
-					switch asIdent.Str {
+					switch asIdent.Val {
 					case "if":
 						return convertToIfExpr(exprs[1:])
 					case "fn":
@@ -216,13 +216,13 @@ func convertToFnExpr(exprs []Expr) (*FnExpr, error) {
 	if !isCall {
 		return nil, fmt.Errorf("fn requires an argument list as the first expr")
 	}
-	for _, c := range asCall.Get() {
-		asIdent, isIdent := c.(*IdentValue)
+	for _, e := range asCall.Exprs {
+		asIdent, isIdent := e.(*IdentValue)
 		if !isIdent {
 			return nil, fmt.Errorf("fn argument list must be all idents")
 		}
 		args = append(args, Arg{
-			Ident: asIdent.Get(),
+			Ident: asIdent.Val,
 		})
 	}
 	return NewFnExpr(args, exprs[1:]), nil

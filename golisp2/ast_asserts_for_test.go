@@ -17,7 +17,7 @@ func assertAsNum(t *testing.T, v Value) *NumberValue {
 func assertNumValue(t *testing.T, v Value, expected float64) {
 	t.Helper()
 	asNum := assertAsNum(t, v)
-	require.Equal(t, expected, asNum.Get())
+	require.Equal(t, expected, asNum.Val)
 }
 
 func assertNilValue(t *testing.T, v Value) {
@@ -38,7 +38,7 @@ func assertAsString(t *testing.T, v Value) *StringValue {
 func assertStringValue(t *testing.T, v Value, expected string) {
 	t.Helper()
 	asStr := assertAsString(t, v)
-	require.Equal(t, expected, asStr.Get())
+	require.Equal(t, expected, asStr.Val)
 }
 
 func assertAsBool(t *testing.T, v Value) *BoolValue {
@@ -52,7 +52,7 @@ func assertAsBool(t *testing.T, v Value) *BoolValue {
 func assertBoolValue(t *testing.T, v Value, expected bool) {
 	t.Helper()
 	asBool := assertAsBool(t, v)
-	require.Equal(t, expected, asBool.Get())
+	require.Equal(t, expected, asBool.Val)
 }
 
 func assertAsFunc(t *testing.T, v Value) *FuncValue {
