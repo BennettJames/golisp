@@ -127,6 +127,7 @@ func scanNextToken(s *subTokenScanner) *ScannedToken {
 	tryParsers := []func(*subTokenScanner) *ScannedToken{
 		tryParseOpenParen,
 		tryParseCloseParen,
+		tryParseComment,
 		tryParseSignedValue,
 		tryParseOperator,
 		tryParseNumber,
@@ -157,6 +158,16 @@ func tryParseCloseParen(s *subTokenScanner) *ScannedToken {
 		return s.Complete(CloseParenTT)
 	}
 	return nil
+}
+
+func tryParseComment(s *subTokenScanner) *ScannedToken {
+	if s.Rune() != ';' {
+		return nil
+	}
+	for !s.Done() && s.Rune() != '\n' {
+		s.Advance()
+	}
+	return s.Complete(CommentTT)
 }
 
 func tryParseSignedValue(s *subTokenScanner) *ScannedToken {

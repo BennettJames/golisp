@@ -153,6 +153,33 @@ func Test_TokenizeString(t *testing.T) {
 				},
 			},
 		},
+		{
+			Name: "comment",
+			Input: `
+			; 1
+			2
+			; 3
+			4
+			`,
+			Output: []ScannedToken{
+				ScannedToken{
+					Typ:   CommentTT,
+					Value: "; 1",
+				},
+				ScannedToken{
+					Typ:   NumberTT,
+					Value: "2",
+				},
+				ScannedToken{
+					Typ:   CommentTT,
+					Value: "; 3",
+				},
+				ScannedToken{
+					Typ:   NumberTT,
+					Value: "4",
+				},
+			},
+		},
 	}
 
 	for _, c := range testCases {

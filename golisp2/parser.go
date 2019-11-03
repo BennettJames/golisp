@@ -82,6 +82,7 @@ func parseCallExpr(ts *TokenScanner) (Expr, error) {
 				}
 			}
 			return NewCallExpr(exprs...), nil
+
 		case OpenParenTT:
 			subCall, subCallErr := parseCallExpr(ts)
 			if subCallErr != nil {
@@ -90,20 +91,6 @@ func parseCallExpr(ts *TokenScanner) (Expr, error) {
 			exprs = append(exprs, subCall)
 
 		case IdentTT:
-			// there are a few special cases here. For starters at least, if/fn I
-			// believe need special handling. *technically* I could probably get by
-			// deferring that, but I think doing it here makes sense.
-			//
-			// They are admittedly a little weird. Particularly: they can only be the
-			// *first* expression. After that, they should be considered illegal.
-			//
-			// That actually has some implications. You need to do an initial check to
-			// see if the ident has special handling
-			//
-			// The alternative, it's worth reminding, would be to treat everything as
-			// vanilla expression, then have special cases after the fact. Perhaps I
-			// should give that more consideration here; but I just don't like it
-			// much.
 			identV, identErr := parseIdentValue(next.Value)
 			if identErr != nil {
 				return nil, identErr

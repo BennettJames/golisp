@@ -28,22 +28,10 @@ type (
 	}
 
 	// Value represents any arbitrary value within the lisp interpreting
-	// environment.
+	// environment. While it just extends "expr", the implicit contract is that no
+	// work is actually performed at eval time; it just returns itself.
 	//
-	// ques (bs): as-is, does this really need to be separate from expr? All's it
-	// has is InspectStr, which is of dubious value as a distinct function. I think
-	// for the sake of naming it can make sense to differentiate "value" from
-	// "expression" just to mean a concrete object-of-sorts, but I'm not convinced
-	// a distinct type is the right way to represent that.
-	//
-	// I suppose there is one difference potentially worth making a note of: a
-	// value always returns itself when evaluated. That is essentially it's
-	// "point": a value is a plain thing that requires no computation; it just is.
-	//
-	// But, that's not really reflected in the type system; and I think I may even
-	// be violating that in a few points. Again, I think the right answer here be
-	// to just not call attention to it in the type system, but still clearly
-	// label plain values as such in their
+	// note (bs): not sure this is valuable; also not sure
 	Value interface {
 		Expr
 	}
