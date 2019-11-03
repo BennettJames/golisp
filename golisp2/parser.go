@@ -9,23 +9,18 @@ import (
 // ExecString executes the lisp program contained in str, and returns the
 // output.
 func ExecString(str string) (string, error) {
-	ts := NewTokenScanner(NewRuneScanner(strings.NewReader(
-		`((fn (x) (+ x x)) 5)`)))
+	ts := NewTokenScanner(NewRuneScanner(strings.NewReader(str)))
 	exprs, exprsErr := ParseTokens(ts)
 	if exprsErr != nil {
 		return "", exprsErr
 	}
-	var sb strings.Builder
 
-	// todo (bs): seed this with built-ins. Preferrably; there'd be a way to mark
-	// contexts as non-extendable and could have a shared built-in, but that's
-	// very hypothetical.
-	c := &ExprContext{
-		vals: map[string]Value{},
-	}
+	c := BuiltinContext()
+
+	var sb strings.Builder
 	for _, e := range exprs {
 		v := e.Eval(c)
-		sb.WriteString(v.PrintStr())
+		sb.WriteString(v.InspectStr())
 		sb.WriteByte('\n')
 	}
 
@@ -35,33 +30,19 @@ func ExecString(str string) (string, error) {
 // ParseTokens reads in the tokens, and converts them to a set of expressions.
 // Returns the set, and any parse errors that are encountered in the process.
 func ParseTokens(ts *TokenScanner) ([]Expr, error) {
-
-	// note (bs): I think the token scanner will likely need to be modified so it
-	// retains a value in the same way that the rune scanner does. Having that
-	// retention just makes it much easier to iterate through the values.
-	//
-	// regardless: the idea here is that I just parse and get an open paren, then
-	// call a subparser to finish. If anything else is encountered, then an error
-	// is generated.
-	//
-	// Not sure I should worry about this quite yet, but one thing I'll mention:
-	// it'd probably be possible to retain token location in source as part of
-	// this, and generate error messages off of that. Again, not sure one way or
-	// another if that's worth the effort yet. I'd at least give it a gander after
-	// the main body of work here is done. It might not be too bad; and it
-	// wouldn't hurt to at least start making half-hearted attempts at
-	// end-usability here.
-	//
-	// One thing I would like to do is make it so I could properly print out the
-	// code from the AST. It feels wrong to me to throw that info out; I feel like
-	// it wouldn't be unreasonable to say that I should have some means to print
-	// out the entirety of the tree to something that works. I think that's a
-	// fundamental part of homoiconicity.
-
 	exprs := []Expr{}
 	for !ts.Done() {
 		// note (bs): token interchange here is super hacky; needs to be better
 		maybeOpen := ts.Next()
+
+		if maybeOpen == nil {
+			if ts.Done() {
+				break
+			} else {
+				return nil, fmt.Errorf("unexpected nil token")
+			}
+		}
+
 		if maybeOpen.Typ != OpenParenTT {
 			return nil, fmt.Errorf("unexpected top-level token: %+v", maybeOpen)
 		}
@@ -90,11 +71,13 @@ func parseCallExpr(ts *TokenScanner) (Expr, error) {
 				// send out a subparser to be responsible for handling built-ins/macros,
 				// but I'll worry about that later.
 				if asIdent, isIdent := exprs[0].(*IdentValue); isIdent {
-					switch asIdent.ident {
+					switch asIdent.Str {
 					case "if":
 						return convertToIfExpr(exprs[1:])
 					case "fn":
 						return convertToFnExpr(exprs[1:])
+					case "let":
+						return convertToLetExpr(exprs[1:])
 					}
 				}
 			}
@@ -200,23 +183,23 @@ func parseOpValue(rawV string) (*FuncValue, error) {
 	// statement
 	switch rawV {
 	case "+":
-		return NewFuncValue(addFn), nil
+		return NewFuncValue("+", addFn), nil
 	case "-":
-		return NewFuncValue(subFn), nil
+		return NewFuncValue("-", subFn), nil
 	case "*":
-		return NewFuncValue(multFn), nil
+		return NewFuncValue("*", multFn), nil
 	case "/":
-		return NewFuncValue(divFn), nil
+		return NewFuncValue("/", divFn), nil
 	case "==":
-		return NewFuncValue(eqNumFn), nil
+		return NewFuncValue("==", eqNumFn), nil
 	case "<":
-		return NewFuncValue(ltNumFn), nil
+		return NewFuncValue("<", ltNumFn), nil
 	case ">":
-		return NewFuncValue(gtNumFn), nil
+		return NewFuncValue(">", gtNumFn), nil
 	case "<=":
-		return NewFuncValue(lteNumFn), nil
+		return NewFuncValue("<=", lteNumFn), nil
 	case ">=":
-		return NewFuncValue(gteNumFn), nil
+		return NewFuncValue(">=", gteNumFn), nil
 	default:
 		return nil, fmt.Errorf("unrecognized operator: %s", rawV)
 	}
@@ -238,8 +221,6 @@ func convertToIfExpr(exprs []Expr) (*IfExpr, error) {
 }
 
 func convertToFnExpr(exprs []Expr) (*FnExpr, error) {
-	// so - how will this work? This is more complicated than the if conversion.
-	// Technically I sort
 	if len(exprs) == 0 {
 		return nil, fmt.Errorf("fn requires an argument list")
 	}
@@ -258,4 +239,74 @@ func convertToFnExpr(exprs []Expr) (*FnExpr, error) {
 		})
 	}
 	return NewFnExpr(args, exprs[1:]), nil
+}
+
+func convertToLetExpr(exprs []Expr) (Expr, error) {
+	if len(exprs) != 2 {
+		return nil, fmt.Errorf("let requires exactly two arguments")
+	}
+	asIdent, isIdent := exprs[0].(*IdentValue)
+	if !isIdent {
+		return nil, fmt.Errorf("let requires an ident as the first values")
+	}
+	valExpr := exprs[1]
+
+	// So - I *think* this would work, but I disagree with it on principle. First:
+	// let's see if it works; then I can navel gaze once again on the relative
+	// sensibility of this.
+	//
+	// Alright, so it works. What next? I think, given the nature of the
+	// language-style I am aiming for, I'd like to still convert this to a data
+	// structure. But I'd like to go farther than that: I'd like to convert all
+	// AST elements to raw-ish structs. That means no purposeless accessors, and
+	// only to have constructors in cases where it makes it easier to reason
+	// about.
+	//
+	// So - for the let case, I'd say make it just have an ident and an assignment
+	// expression. Can have a try-constructor like this that takes a list of
+	// arguments and assigns them appropriately.
+	//
+	// This does raise a separate question for me though: should I simplify my
+	// core set of function types? The following feels a little unnecessarily
+	// complex. Granted, I am sorta explicitly abusing the built-in's here, but
+	// this doesn't feel like a hard case. Is it possible my built-in's are
+	// groping and are not finding the right level of abstraction?
+	//
+	// So, first up: I think it's fair to say there are two different notions of
+	// evaluation, of sorts. There's the external "compute and return the
+	// expression", and the internal notion of "evaluate all arguments, the
+	// compute the base function". Are those truly different though; or is that
+	// just one concept with two sides? Plain eval'ing can kinda be crammed into
+	// the exec category just by ignoring the expr list (as this case does), but
+	// that doesn't feel satisfying.
+	//
+	// Options? One is just to preserve the different notions. I still could
+	// smooth the paths somewhat if I have some more obvious, core API's; could
+	// even do things like make boxing a plain eval as an exec easy (for better or
+	// worse).
+	//
+	// Alternatively: would it make sense to re-write exec's as eval's, so to
+	// speak? That is:
+	//
+	// That wouldn't really seem to be doing anything though. Maybe it just comes
+	// down to a fundamental divide: blocks are evaluated; functions are called.
+	// The latter by it's nature has it's
+	//
+	// The problem here then is just the lack of a primitive for self-contained
+	// expression blocks. Arguably, function declarations themselves are also a
+	// little more convoluted then they need to be. I don't think it's wrong per
+	// se to have a wrapper for them; but the wrapper is underpowered and I don't
+	// think it necessarily should be mandatory.
+	//
+	// So - should I change that? I could define types like this:
+	//
+	//  type PlainFn func(*ExprContext, []Expr) (Value, Error)
+	//  type PlainExpr func(*ExprContext) (Value, Error)
+	//
+	// then define "Call" and "Eval" on them, respectively.
+
+	return &LetExpr{
+		Ident: asIdent,
+		Value: valExpr,
+	}, nil
 }

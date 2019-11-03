@@ -5,87 +5,23 @@ import (
 	"strings"
 )
 
-func addFn(c *ExprContext, exprs ...Expr) (Value, error) {
-	total := float64(0)
-	for _, e := range exprs {
-		v := e.Eval(c)
-		asNum, isNum := v.(*NumberValue)
-		if !isNum {
-			// note (bs): eventually, try to make a version of this error that's more
-			// portable, obvious, and a little more resilient to nil values.
-			return nil, fmt.Errorf("non-number value in add: %v", asNum.PrintStr())
-		}
-		total += asNum.Get()
-	}
-	return &NumberValue{
-		val: total,
-	}, nil
+// BuiltinContext returns a context that contains the full set of builtin
+// functions. Note this just includes built-in plain functions; not operators.
+func BuiltinContext() *ExprContext {
+	return NewContext(map[string]Value{
+		"concat": NewFuncValue("concat", concatFn),
+		"cons":   NewFuncValue("cons", consFn),
+		"car":    NewFuncValue("car", carFn),
+		"cdr":    NewFuncValue("cdr", cdrFn),
+		"and":    NewFuncValue("and", andFn),
+		"or":     NewFuncValue("or", orFn),
+		"not":    NewFuncValue("not", notFn),
+	})
 }
 
-func subFn(c *ExprContext, exprs ...Expr) (Value, error) {
-	// ques (bs): should I still enforce minimum airity requirements here? I'm
-	// sorta inclined to say yes; but not sure how much I care about that right
-	// now. Particularly: that seems to get into deeper questions of type
-	// enforcement. Something like this could just be reduced to a set of number
-	// values, and an error returned if
-	//
-	// That all seems like a "later" task. I'd like to just grind a bit on the
-	// core language; some better limitations or even
-
-	total := float64(0)
-	for i, e := range exprs {
-		v := e.Eval(c)
-		asNum, isNum := v.(*NumberValue)
-		if !isNum {
-			// note (bs): eventually, try to make a version of this error that's more
-			// portable, obvious, and a little more resilient to nil values.
-			return nil, fmt.Errorf("non-number value in add: %v", v.PrintStr())
-		}
-		if i == 0 {
-			total = asNum.Get()
-		} else {
-			total -= asNum.Get()
-		}
-	}
-
-	return &NumberValue{
-		val: total,
-	}, nil
-}
-
-func multFn(c *ExprContext, exprs ...Expr) (Value, error) {
-	total := float64(1)
-	for _, e := range exprs {
-		v := e.Eval(c)
-		asNum, isNum := v.(*NumberValue)
-		if !isNum {
-			return nil, fmt.Errorf("non-number value in add: %v", asNum.PrintStr())
-		}
-		total *= asNum.Get()
-	}
-	return &NumberValue{
-		val: total,
-	}, nil
-}
-
-func divFn(c *ExprContext, exprs ...Expr) (Value, error) {
-	total := float64(1)
-	for i, e := range exprs {
-		v := e.Eval(c)
-		asNum, isNum := v.(*NumberValue)
-		if !isNum {
-			return nil, fmt.Errorf("non-number value in add: %v", asNum.PrintStr())
-		}
-		if i == 0 {
-			total = asNum.Get()
-		} else {
-			total /= asNum.Get()
-		}
-	}
-	return &NumberValue{
-		val: total,
-	}, nil
-}
+//
+// Explicit, named built-ins
+//
 
 func concatFn(c *ExprContext, exprs ...Expr) (Value, error) {
 	var sb strings.Builder
@@ -93,12 +29,12 @@ func concatFn(c *ExprContext, exprs ...Expr) (Value, error) {
 		v := e.Eval(c)
 		asStr, isStr := v.(*StringValue)
 		if !isStr {
-			return nil, fmt.Errorf("non-number value in add: %v", v.PrintStr())
+			return nil, fmt.Errorf("non-number value in add: %v", v.InspectStr())
 		}
 		sb.WriteString(asStr.Get())
 	}
 	return &StringValue{
-		val: sb.String(),
+		Val: sb.String(),
 	}, nil
 }
 
@@ -122,8 +58,7 @@ func carFn(c *ExprContext, exprs ...Expr) (Value, error) {
 		// this is quite right. Need a better way to assemble type-error messages.
 		return nil, fmt.Errorf("car expects a cell type, got %v", asNode)
 	}
-	leftV, _ := asNode.Get()
-	return leftV, nil
+	return asNode.Left, nil
 }
 
 func cdrFn(c *ExprContext, exprs ...Expr) (Value, error) {
@@ -135,8 +70,7 @@ func cdrFn(c *ExprContext, exprs ...Expr) (Value, error) {
 	if !isNode {
 		return nil, fmt.Errorf("cdr expects a cell type, got %v", asNode)
 	}
-	_, rightV := asNode.Get()
-	return rightV, nil
+	return asNode.Right, nil
 }
 
 func andFn(c *ExprContext, exprs ...Expr) (Value, error) {
@@ -184,6 +118,96 @@ func notFn(c *ExprContext, exprs ...Expr) (Value, error) {
 	}
 	return NewBoolValue(!asBool.Get()), nil
 }
+
+//
+// Mathematical operator built-ins
+//
+
+func addFn(c *ExprContext, exprs ...Expr) (Value, error) {
+	total := float64(0)
+	for _, e := range exprs {
+		v := e.Eval(c)
+		asNum, isNum := v.(*NumberValue)
+		if !isNum {
+			// note (bs): eventually, try to make a version of this error that's more
+			// portable, obvious, and a little more resilient to nil values.
+			return nil, fmt.Errorf("non-number value in add: %v", asNum.InspectStr())
+		}
+		total += asNum.Get()
+	}
+	return &NumberValue{
+		Val: total,
+	}, nil
+}
+
+func subFn(c *ExprContext, exprs ...Expr) (Value, error) {
+	// ques (bs): should I still enforce minimum airity requirements here? I'm
+	// sorta inclined to say yes; but not sure how much I care about that right
+	// now. Particularly: that seems to get into deeper questions of type
+	// enforcement. Something like this could just be reduced to a set of number
+	// values, and an error returned if
+	//
+	// That all seems like a "later" task. I'd like to just grind a bit on the
+	// core language; some better limitations or even
+
+	total := float64(0)
+	for i, e := range exprs {
+		v := e.Eval(c)
+		asNum, isNum := v.(*NumberValue)
+		if !isNum {
+			// note (bs): eventually, try to make a version of this error that's more
+			// portable, obvious, and a little more resilient to nil values.
+			return nil, fmt.Errorf("non-number value in add: %v", v.InspectStr())
+		}
+		if i == 0 {
+			total = asNum.Get()
+		} else {
+			total -= asNum.Get()
+		}
+	}
+
+	return &NumberValue{
+		Val: total,
+	}, nil
+}
+
+func multFn(c *ExprContext, exprs ...Expr) (Value, error) {
+	total := float64(1)
+	for _, e := range exprs {
+		v := e.Eval(c)
+		asNum, isNum := v.(*NumberValue)
+		if !isNum {
+			return nil, fmt.Errorf("non-number value in add: %v", asNum.InspectStr())
+		}
+		total *= asNum.Get()
+	}
+	return &NumberValue{
+		Val: total,
+	}, nil
+}
+
+func divFn(c *ExprContext, exprs ...Expr) (Value, error) {
+	total := float64(1)
+	for i, e := range exprs {
+		v := e.Eval(c)
+		asNum, isNum := v.(*NumberValue)
+		if !isNum {
+			return nil, fmt.Errorf("non-number value in add: %v", asNum.InspectStr())
+		}
+		if i == 0 {
+			total = asNum.Get()
+		} else {
+			total /= asNum.Get()
+		}
+	}
+	return &NumberValue{
+		Val: total,
+	}, nil
+}
+
+//
+// Comparison operator built-in
+//
 
 func eqNumFn(ec *ExprContext, exprs ...Expr) (Value, error) {
 	if len(exprs) != 2 {

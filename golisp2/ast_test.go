@@ -1,6 +1,7 @@
 package golisp2
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -9,7 +10,7 @@ import (
 func Test_mathFn(t *testing.T) {
 	t.Run("add", func(t *testing.T) {
 		v, e := addFn(
-			&ExprContext{},
+			BuiltinContext(),
 			NewNumberValue(1),
 			NewNumberValue(2),
 		)
@@ -19,7 +20,7 @@ func Test_mathFn(t *testing.T) {
 
 	t.Run("sub", func(t *testing.T) {
 		v, e := subFn(
-			&ExprContext{},
+			BuiltinContext(),
 			NewNumberValue(2),
 			NewNumberValue(1),
 		)
@@ -29,7 +30,7 @@ func Test_mathFn(t *testing.T) {
 
 	t.Run("mult", func(t *testing.T) {
 		v, e := multFn(
-			&ExprContext{},
+			BuiltinContext(),
 			NewNumberValue(3),
 			NewNumberValue(4),
 		)
@@ -39,7 +40,7 @@ func Test_mathFn(t *testing.T) {
 
 	t.Run("divide", func(t *testing.T) {
 		v, e := divFn(
-			&ExprContext{},
+			BuiltinContext(),
 			NewNumberValue(6),
 			NewNumberValue(2),
 		)
@@ -50,7 +51,7 @@ func Test_mathFn(t *testing.T) {
 
 func Test_concat(t *testing.T) {
 	v, e := concatFn(
-		&ExprContext{},
+		BuiltinContext(),
 		NewStringValue("abc"),
 		NewStringValue("efg"),
 	)
@@ -60,7 +61,7 @@ func Test_concat(t *testing.T) {
 
 func Test_cell(t *testing.T) {
 	v, e := consFn(
-		&ExprContext{},
+		BuiltinContext(),
 		NewStringValue("a"),
 		NewStringValue("b"),
 	)
@@ -68,29 +69,29 @@ func Test_cell(t *testing.T) {
 	assertAsCell(t, v)
 
 	left, leftErr := carFn(
-		&ExprContext{},
+		BuiltinContext(),
 		v,
 	)
 	right, rightErr := cdrFn(
-		&ExprContext{},
+		BuiltinContext(),
 		v,
 	)
 	require.NoError(t, leftErr)
 	require.NoError(t, rightErr)
 	assertStringValue(t, left, "a")
 	assertStringValue(t, right, "b")
-	require.Equal(t, "(\"a\" . \"b\")", v.PrintStr())
+	require.Equal(t, "(\"a\" . \"b\")", v.InspectStr())
 }
 
 func Test_bool(t *testing.T) {
-	t.Run("boolPrintStr", func(t *testing.T) {
-		require.Equal(t, "true", NewBoolValue(true).PrintStr())
-		require.Equal(t, "false", NewBoolValue(false).PrintStr())
+	t.Run("boolInspectStr", func(t *testing.T) {
+		require.Equal(t, "true", NewBoolValue(true).InspectStr())
+		require.Equal(t, "false", NewBoolValue(false).InspectStr())
 	})
 
 	t.Run("and", func(t *testing.T) {
 		v1, e1 := andFn(
-			&ExprContext{},
+			BuiltinContext(),
 			NewBoolValue(true),
 			NewBoolValue(true),
 		)
@@ -98,7 +99,7 @@ func Test_bool(t *testing.T) {
 		assertBoolValue(t, v1, true)
 
 		v2, e2 := andFn(
-			&ExprContext{},
+			BuiltinContext(),
 			NewBoolValue(true),
 			NewBoolValue(false),
 		)
@@ -108,7 +109,7 @@ func Test_bool(t *testing.T) {
 
 	t.Run("or", func(t *testing.T) {
 		v1, e1 := orFn(
-			&ExprContext{},
+			BuiltinContext(),
 			NewBoolValue(true),
 			NewBoolValue(false),
 		)
@@ -116,7 +117,7 @@ func Test_bool(t *testing.T) {
 		assertBoolValue(t, v1, true)
 
 		v2, e2 := orFn(
-			&ExprContext{},
+			BuiltinContext(),
 			NewBoolValue(false),
 			NewBoolValue(false),
 			NewBoolValue(false),
@@ -127,14 +128,14 @@ func Test_bool(t *testing.T) {
 
 	t.Run("not", func(t *testing.T) {
 		v1, e1 := notFn(
-			&ExprContext{},
+			BuiltinContext(),
 			NewBoolValue(true),
 		)
 		require.NoError(t, e1)
 		assertBoolValue(t, v1, false)
 
 		v2, e2 := notFn(
-			&ExprContext{},
+			BuiltinContext(),
 			NewBoolValue(false),
 		)
 		require.NoError(t, e2)
@@ -170,8 +171,8 @@ func Test_parenExpr(t *testing.T) {
 	ec := &ExprContext{
 		parent: &ExprContext{
 			vals: map[string]Value{
-				"add": NewFuncValue(addFn),
-				"sub": NewFuncValue(subFn),
+				"add": NewFuncValue("", addFn),
+				"sub": NewFuncValue("", subFn),
 			},
 		},
 		vals: map[string]Value{
@@ -196,14 +197,14 @@ func Test_numComparison(t *testing.T) {
 
 	t.Run("eq", func(t *testing.T) {
 		v1 := NewCallExpr(
-			NewFuncValue(eqNumFn),
+			NewFuncValue("", eqNumFn),
 			NewNumberValue(1),
 			NewNumberValue(1),
 		).Eval(nil)
 		assertBoolValue(t, v1, true)
 
 		v2 := NewCallExpr(
-			NewFuncValue(eqNumFn),
+			NewFuncValue("", eqNumFn),
 			NewNumberValue(1),
 			NewNumberValue(2),
 		).Eval(nil)
@@ -213,21 +214,21 @@ func Test_numComparison(t *testing.T) {
 
 	t.Run("gt", func(t *testing.T) {
 		v1 := NewCallExpr(
-			NewFuncValue(gtNumFn),
+			NewFuncValue("", gtNumFn),
 			NewNumberValue(1),
 			NewNumberValue(1),
 		).Eval(nil)
 		assertBoolValue(t, v1, false)
 
 		v2 := NewCallExpr(
-			NewFuncValue(gtNumFn),
+			NewFuncValue("", gtNumFn),
 			NewNumberValue(1),
 			NewNumberValue(2),
 		).Eval(nil)
 		assertBoolValue(t, v2, false)
 
 		v3 := NewCallExpr(
-			NewFuncValue(gtNumFn),
+			NewFuncValue("", gtNumFn),
 			NewNumberValue(2),
 			NewNumberValue(1),
 		).Eval(nil)
@@ -236,21 +237,21 @@ func Test_numComparison(t *testing.T) {
 
 	t.Run("lt", func(t *testing.T) {
 		v1 := NewCallExpr(
-			NewFuncValue(ltNumFn),
+			NewFuncValue("", ltNumFn),
 			NewNumberValue(1),
 			NewNumberValue(1),
 		).Eval(nil)
 		assertBoolValue(t, v1, false)
 
 		v2 := NewCallExpr(
-			NewFuncValue(ltNumFn),
+			NewFuncValue("", ltNumFn),
 			NewNumberValue(1),
 			NewNumberValue(2),
 		).Eval(nil)
 		assertBoolValue(t, v2, true)
 
 		v3 := NewCallExpr(
-			NewFuncValue(ltNumFn),
+			NewFuncValue("", ltNumFn),
 			NewNumberValue(2),
 			NewNumberValue(1),
 		).Eval(nil)
@@ -259,21 +260,21 @@ func Test_numComparison(t *testing.T) {
 
 	t.Run("gte", func(t *testing.T) {
 		v1 := NewCallExpr(
-			NewFuncValue(gteNumFn),
+			NewFuncValue("", gteNumFn),
 			NewNumberValue(1),
 			NewNumberValue(1),
 		).Eval(nil)
 		assertBoolValue(t, v1, true)
 
 		v2 := NewCallExpr(
-			NewFuncValue(gteNumFn),
+			NewFuncValue("", gteNumFn),
 			NewNumberValue(1),
 			NewNumberValue(2),
 		).Eval(nil)
 		assertBoolValue(t, v2, false)
 
 		v3 := NewCallExpr(
-			NewFuncValue(gteNumFn),
+			NewFuncValue("", gteNumFn),
 			NewNumberValue(2),
 			NewNumberValue(1),
 		).Eval(nil)
@@ -282,21 +283,21 @@ func Test_numComparison(t *testing.T) {
 
 	t.Run("lte", func(t *testing.T) {
 		v1 := NewCallExpr(
-			NewFuncValue(lteNumFn),
+			NewFuncValue("", lteNumFn),
 			NewNumberValue(1),
 			NewNumberValue(1),
 		).Eval(nil)
 		assertBoolValue(t, v1, true)
 
 		v2 := NewCallExpr(
-			NewFuncValue(lteNumFn),
+			NewFuncValue("", lteNumFn),
 			NewNumberValue(1),
 			NewNumberValue(2),
 		).Eval(nil)
 		assertBoolValue(t, v2, true)
 
 		v3 := NewCallExpr(
-			NewFuncValue(lteNumFn),
+			NewFuncValue("", lteNumFn),
 			NewNumberValue(2),
 			NewNumberValue(1),
 		).Eval(nil)
@@ -332,7 +333,7 @@ func Test_fnExpr(t *testing.T) {
 		},
 		[]Expr{
 			NewCallExpr(
-				NewFuncValue(addFn),
+				NewFuncValue("", addFn),
 				NewIdentValue("a"),
 				NewIdentValue("b"),
 				NewIdentValue("b"),
@@ -344,4 +345,89 @@ func Test_fnExpr(t *testing.T) {
 	v, e := asFn.Exec(nil, NewNumberValue(1), NewNumberValue(2))
 	require.NoError(t, e)
 	assertNumValue(t, v, 5)
+}
+
+func Test_CodeStr(t *testing.T) {
+
+	// printAndReparse is a helper that converts the expression to string, parses
+	// it, and returns the re-parsed expression. Anything unexpected will result
+	// in a test failure.
+	printAndReparse := func(t *testing.T, e Expr) Expr {
+		ts := NewTokenScanner(NewRuneScanner(strings.NewReader(e.CodeStr())))
+		exprs, exprsErr := ParseTokens(ts)
+		require.NoError(t, exprsErr)
+		require.Equal(t, 1, len(exprs))
+		return exprs[0]
+	}
+
+	t.Run("cell", func(t *testing.T) {
+		baseAST := NewCellValue(
+			NewNumberValue(1),
+			NewCellValue(
+				NewNumberValue(2),
+				nil,
+			),
+		)
+		reparsedExpr := printAndReparse(t, baseAST)
+		require.Equal(t, baseAST, reparsedExpr.Eval(BuiltinContext()))
+	})
+
+	t.Run("if", func(t *testing.T) {
+		baseAST := &IfExpr{
+			Cond: NewBoolValue(false),
+			Case1: NewCallExpr(
+				NewIdentValue("car"),
+				NewCellValue(
+					NewNumberValue(1),
+					NewNumberValue(2),
+				),
+			),
+			Case2: NewCallExpr(
+				NewIdentValue("cdr"),
+				NewCellValue(
+					NewNumberValue(1),
+					NewNumberValue(2),
+				),
+			),
+		}
+		reparsedExpr := printAndReparse(t, baseAST)
+		v := reparsedExpr.Eval(BuiltinContext())
+		assertNumValue(t, v, 2)
+	})
+
+	t.Run("let", func(t *testing.T) {
+		baseAST := &LetExpr{
+			Ident: NewIdentValue("value"),
+			Value: NewNumberValue(2),
+		}
+		reparsedExpr := printAndReparse(t, baseAST)
+		ec := BuiltinContext()
+		reparsedExpr.Eval(ec)
+		ctxVal, hasCtxVal := ec.Resolve("value")
+		require.True(t, hasCtxVal)
+		assertNumValue(t, ctxVal, 2)
+	})
+
+	t.Run("fn", func(t *testing.T) {
+		baseAST := NewCallExpr(
+			NewFnExpr(
+				[]Arg{
+					{Ident: "a"},
+				},
+				[]Expr{
+					NewCallExpr(
+						NewIdentValue("add"),
+						NewIdentValue("a"),
+						NewNumberValue(1),
+					),
+				},
+			),
+			NewNumberValue(5),
+		)
+		reparsedExpr := printAndReparse(t, baseAST)
+		v := reparsedExpr.Eval(BuiltinContext().SubContext(map[string]Value{
+			"add": NewFuncValue("add", addFn),
+		}))
+		assertNumValue(t, v, 6)
+	})
 }

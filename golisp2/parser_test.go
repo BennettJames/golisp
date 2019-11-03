@@ -14,12 +14,7 @@ func Test_ParseTokens(t *testing.T) {
 		exprs, exprsErr := ParseTokens(ts)
 		require.NoError(t, exprsErr)
 		require.Equal(t, len(exprs), 1)
-		return exprs[0].Eval(&ExprContext{
-			vals: map[string]Value{
-				"concat": NewFuncValue(concatFn),
-				"or":     NewFuncValue(orFn),
-			},
-		})
+		return exprs[0].Eval(BuiltinContext())
 	}
 
 	t.Run("basic", func(t *testing.T) {
@@ -45,5 +40,14 @@ func Test_ParseTokens(t *testing.T) {
 	t.Run("bool", func(t *testing.T) {
 		v := evalStringToValue(t, `(or true false)`)
 		assertBoolValue(t, v, true)
+	})
+
+	t.Run("let", func(t *testing.T) {
+		v := evalStringToValue(t, `
+		((fn (x)
+		  (let y (+ x x))
+		  (+ y y))
+		 5)`)
+		assertNumValue(t, v, 20)
 	})
 }

@@ -2,13 +2,22 @@ package golisp2
 
 import (
 	"fmt"
+	"strings"
 )
 
 type (
 	// Expr is the fundamental unit of lisp - it represents anything that can be
 	// evaluated to a value.
 	Expr interface {
+		// Eval will evaluate the underlying expression, and return the value (if
+		// any) that was calculated and returned.
 		Eval(*ExprContext) Value
+
+		// CodeStr will return the code representation of the given expression.
+		CodeStr() string
+
+		// InspectStr returns a printable version of the expression.
+		InspectStr() string
 	}
 
 	// ExprContext is the context on evaluation. It contains a resolvable set of
@@ -20,12 +29,23 @@ type (
 
 	// Value represents any arbitrary value within the lisp interpreting
 	// environment.
+	//
+	// ques (bs): as-is, does this really need to be separate from expr? All's it
+	// has is InspectStr, which is of dubious value as a distinct function. I think
+	// for the sake of naming it can make sense to differentiate "value" from
+	// "expression" just to mean a concrete object-of-sorts, but I'm not convinced
+	// a distinct type is the right way to represent that.
+	//
+	// I suppose there is one difference potentially worth making a note of: a
+	// value always returns itself when evaluated. That is essentially it's
+	// "point": a value is a plain thing that requires no computation; it just is.
+	//
+	// But, that's not really reflected in the type system; and I think I may even
+	// be violating that in a few points. Again, I think the right answer here be
+	// to just not call attention to it in the type system, but still clearly
+	// label plain values as such in their
 	Value interface {
 		Expr
-
-		// PrintStr returns a printable version of the value. Note that this is not
-		// the same as casting to a string.
-		PrintStr() string
 	}
 
 	// IdentValue is a representation of an identifier in the interpreted
@@ -35,13 +55,13 @@ type (
 		// "compound lookups"; e.g. "Foo.Bar.A"; in which case I think this should
 		// not just be a string. Arguably, that should have it's own datatype
 		// anyway.
-		ident string
+		Str string
 	}
 
 	// NumberValue is a representation of a number value within the interpreted
 	// environment.
 	NumberValue struct {
-		val float64
+		Val float64
 	}
 
 	// NilValue is a representation of an null value within the interpreted
@@ -52,54 +72,62 @@ type (
 	// StringValue is a representation of a string within the interpreted
 	// environment.
 	StringValue struct {
-		val string
+		Val string
 	}
 
 	// BoolValue is a representation of a boolean within the interpreted
 	// environment.
 	BoolValue struct {
-		val bool
+		Val bool
 	}
 
 	// FuncValue is a representation of a basic function within the interpreted
 	// environment.
 	FuncValue struct {
-		// ques (bs): should this basic function type exist outside of this context?
-		// Maybe.
+		// Name is the function identifier as it appears in the code.
+		Name string
 
-		fn func(*ExprContext, ...Expr) (Value, error)
+		// Fn is the function body the function value references.
+		Fn func(*ExprContext, ...Expr) (Value, error)
 	}
 
 	// CellValue is a representation of a pair of values within the interpreted
 	// environment. This can be composed to represent lists with standard car/cdr
 	// operators.
 	CellValue struct {
-		left, right Value
+		Left, Right Value
 	}
 
 	// CallExpr is a function call. The first expression is treated as a function,
 	// with the remaining elements passed to it.
 	CallExpr struct {
-		exprs []Expr
+		Exprs []Expr
 	}
 
 	// IfExpr is an if expression. The condition is evaluated: if true, case1 is
 	// evaluated and returned; if false
 	IfExpr struct {
-		cond         Expr
-		case1, case2 Expr
+		Cond         Expr
+		Case1, Case2 Expr
 	}
 
 	// FnExpr is a function definition expression. It has a set of arguments and a
 	// body, and will evaluate the body with the given arguments when called.
 	FnExpr struct {
-		args []Arg
-		body []Expr
+		Args []Arg
+		Body []Expr
 	}
 
 	// Arg is a single element in a function list.
 	Arg struct {
 		Ident string
+	}
+
+	// LetExpr represents an assignment of a value to an identifier. When
+	// evaluated, adds the value to the evaluation context.
+	LetExpr struct {
+		Ident *IdentValue
+		Value Expr
 	}
 )
 
@@ -111,7 +139,7 @@ func NewContext(initialVals map[string]Value) *ExprContext {
 		vals[k] = v
 	}
 	return &ExprContext{
-		vals: map[string]Value{},
+		vals: vals,
 	}
 }
 
@@ -143,13 +171,13 @@ func (ec *ExprContext) Resolve(ident string) (Value, bool) {
 // token.
 func NewIdentValue(ident string) *IdentValue {
 	return &IdentValue{
-		ident: ident,
+		Str: ident,
 	}
 }
 
-// PrintStr will output the name of the identifier.
-func (iv *IdentValue) PrintStr() string {
-	return fmt.Sprintf("'%s'", iv.ident)
+// InspectStr will output the name of the identifier.
+func (iv *IdentValue) InspectStr() string {
+	return fmt.Sprintf("'%s'", iv.Str)
 }
 
 // Eval will traverse the context for the identifier and return nil if the value
@@ -160,7 +188,7 @@ func (iv *IdentValue) PrintStr() string {
 // It's *possible* the right way to handle that is by creating a modified value
 // interface that can directly support the notion of error.
 func (iv *IdentValue) Eval(ec *ExprContext) Value {
-	v, ok := ec.Resolve(iv.ident)
+	v, ok := ec.Resolve(iv.Str)
 	if !ok {
 		return NewNilValue()
 	}
@@ -169,19 +197,24 @@ func (iv *IdentValue) Eval(ec *ExprContext) Value {
 
 // Get just returns the underlying ident string.
 func (iv *IdentValue) Get() string {
-	return iv.ident
+	return iv.Str
+}
+
+// CodeStr will return the code representation of the ident value.
+func (iv *IdentValue) CodeStr() string {
+	return iv.Str
 }
 
 // NewNumberValue instantiates a new number with the given value.
 func NewNumberValue(v float64) *NumberValue {
 	return &NumberValue{
-		val: v,
+		Val: v,
 	}
 }
 
-// PrintStr prints the number.
-func (nv *NumberValue) PrintStr() string {
-	return fmt.Sprintf("%f", nv.val)
+// InspectStr prints the number.
+func (nv *NumberValue) InspectStr() string {
+	return fmt.Sprintf("%f", nv.Val)
 }
 
 // Eval just returns itself.
@@ -191,19 +224,27 @@ func (nv *NumberValue) Eval(*ExprContext) Value {
 
 // Get just returns the underlying number.
 func (nv *NumberValue) Get() float64 {
-	return nv.val
+	return nv.Val
+}
+
+// CodeStr will return the code representation of the number value.
+func (nv *NumberValue) CodeStr() string {
+	// todo (bs): this isn't wrong, exactly, but consider printing integers as
+	// integers. Of course, that starts getting into the deeper issue of how just
+	// having floats is too primitive and there really need to be integers.
+	return fmt.Sprintf("%f", nv.Val)
 }
 
 // NewNilValue creates a new nil value.
 //
-// todo (bs): this should return a singleton; no need for duplcates given that
+// todo (bs): this should return a singleton; no need for duplicates given that
 // it's unmodifiable.
 func NewNilValue() *NilValue {
 	return &NilValue{}
 }
 
-// PrintStr outputs "nil".
-func (nv *NilValue) PrintStr() string {
+// InspectStr outputs "nil".
+func (nv *NilValue) InspectStr() string {
 	return "nil"
 }
 
@@ -214,16 +255,21 @@ func (nv *NilValue) Eval(*ExprContext) Value {
 	return nv
 }
 
+// CodeStr will return the code representation of the nil value.
+func (nv *NilValue) CodeStr() string {
+	return fmt.Sprintf("nil")
+}
+
 // NewStringValue creates a new string value from the given string.
 func NewStringValue(str string) *StringValue {
 	return &StringValue{
-		val: str,
+		Val: str,
 	}
 }
 
-// PrintStr prints the string.
-func (sv *StringValue) PrintStr() string {
-	return fmt.Sprintf("\"%s\"", sv.val)
+// InspectStr prints the string.
+func (sv *StringValue) InspectStr() string {
+	return fmt.Sprintf("\"%s\"", sv.Val)
 }
 
 // Eval returns the string value.
@@ -233,7 +279,14 @@ func (sv *StringValue) Eval(*ExprContext) Value {
 
 // Get returns the raw string value.
 func (sv *StringValue) Get() string {
-	return sv.val
+	return sv.Val
+}
+
+// CodeStr will return the code representation of the string value.
+func (sv *StringValue) CodeStr() string {
+	// note (bs): this doesn't matter now as it's not supported, but just note
+	// that this doesn't work with multiline strings
+	return fmt.Sprintf("\"%s\"", sv.Val)
 }
 
 // NewBoolValue creates a bool with the given value.
@@ -241,13 +294,13 @@ func (sv *StringValue) Get() string {
 // todo (bs): this probably should return singletons for true/false
 func NewBoolValue(v bool) *BoolValue {
 	return &BoolValue{
-		val: v,
+		Val: v,
 	}
 }
 
-// PrintStr prints "true"/"false" based on the value.
-func (bv *BoolValue) PrintStr() string {
-	return fmt.Sprintf("%t", bv.val)
+// InspectStr prints "true"/"false" based on the value.
+func (bv *BoolValue) InspectStr() string {
+	return fmt.Sprintf("%t", bv.Val)
 }
 
 // Eval returns the bool value.
@@ -257,18 +310,29 @@ func (bv *BoolValue) Eval(*ExprContext) Value {
 
 // Get returns the raw bool value.
 func (bv *BoolValue) Get() bool {
-	return bv.val
+	return bv.Val
+}
+
+// CodeStr will return the code representation of the boolean value.
+func (bv *BoolValue) CodeStr() string {
+	if bv.Val {
+		return "true"
+	}
+	return "false"
 }
 
 // NewFuncValue creates a function with the given value.
-func NewFuncValue(fn func(*ExprContext, ...Expr) (Value, error)) *FuncValue {
+func NewFuncValue(
+	name string,
+	fn func(*ExprContext, ...Expr) (Value, error),
+) *FuncValue {
 	return &FuncValue{
-		fn: fn,
+		Fn: fn,
 	}
 }
 
-// PrintStr outputs some information about the function.
-func (fv *FuncValue) PrintStr() string {
+// InspectStr outputs some information about the function.
+func (fv *FuncValue) InspectStr() string {
 	// note (bs): probably want to customize this to print some details about the
 	// function itself. That will involve (optionally) retaining the declaration
 	// name of the function.
@@ -282,12 +346,17 @@ func (fv *FuncValue) Eval(ec *ExprContext) Value {
 
 // Get returns the function value.
 func (fv *FuncValue) Get() func(*ExprContext, ...Expr) (Value, error) {
-	return fv.fn
+	return fv.Fn
 }
 
 // Exec executes the underlying function with the given context and arguments.
 func (fv *FuncValue) Exec(ec *ExprContext, exprs ...Expr) (Value, error) {
-	return fv.fn(ec, exprs...)
+	return fv.Fn(ec, exprs...)
+}
+
+// CodeStr will return the code representation of the function value.
+func (fv *FuncValue) CodeStr() string {
+	return fv.Name
 }
 
 // NewCellValue creates a cell with the given left/right values. Either can be
@@ -300,25 +369,25 @@ func NewCellValue(left, right Value) *CellValue {
 		right = NewNilValue()
 	}
 	return &CellValue{
-		left:  left,
-		right: right,
+		Left:  left,
+		Right: right,
 	}
 }
 
-// PrintStr outputs the contents of all the cells.
-func (nv *CellValue) PrintStr() string {
-	// todo (bs): if second cell is a node, treat this different
-	return fmt.Sprintf("(%s . %s)", nv.left.PrintStr(), nv.right.PrintStr())
-}
-
 // Eval returns the cell.
-func (nv *CellValue) Eval(*ExprContext) Value {
-	return nv
+func (cv *CellValue) Eval(*ExprContext) Value {
+	return cv
 }
 
-// Get returns the cell values.
-func (nv *CellValue) Get() (left, right Value) {
-	return nv.left, nv.right
+// InspectStr outputs the contents of all the cells.
+func (cv *CellValue) InspectStr() string {
+	// todo (bs): if second cell is a node, treat this different
+	return fmt.Sprintf("(%s . %s)", cv.Left.InspectStr(), cv.Right.InspectStr())
+}
+
+// CodeStr will return the code representation of the cell value.
+func (cv *CellValue) CodeStr() string {
+	return fmt.Sprintf("(cons %s %s)\n", cv.Left.CodeStr(), cv.Right.CodeStr())
 }
 
 // NewCallExpr creates a new CallExpr out of the given sub-expressions. Will
@@ -326,20 +395,20 @@ func (nv *CellValue) Get() (left, right Value) {
 // arguments.
 func NewCallExpr(exprs ...Expr) *CallExpr {
 	return &CallExpr{
-		exprs: exprs,
+		Exprs: exprs,
 	}
 }
 
 // Eval will evaluate the expression and return its results.
 func (ce *CallExpr) Eval(ec *ExprContext) Value {
-	if len(ce.exprs) == 0 {
+	if len(ce.Exprs) == 0 {
 		return NewNilValue()
 	}
 
-	v1 := ce.exprs[0].Eval(ec)
+	v1 := ce.Exprs[0].Eval(ec)
 	asFn, isFn := v1.(*FuncValue)
 	if !isFn {
-		if len(ce.exprs) == 1 {
+		if len(ce.Exprs) == 1 {
 			return v1
 		}
 		// fixme (bs): this needs to return an error. Again, either eval needs to be
@@ -348,14 +417,36 @@ func (ce *CallExpr) Eval(ec *ExprContext) Value {
 		return nil
 	}
 
-	value, err := asFn.Exec(ec, ce.exprs[1:]...)
+	value, err := asFn.Exec(ec, ce.Exprs[1:]...)
 	var _ = err // fixme (bs): again, need to handle error passback
 	return value
 }
 
 // Get returns the underlying set of expressions in the call.
 func (ce *CallExpr) Get() []Expr {
-	return ce.exprs
+	return ce.Exprs
+}
+
+// InspectStr returns a user-readable representation of the call expression.
+func (ce *CallExpr) InspectStr() string {
+	if len(ce.Exprs) == 0 {
+		return "<call nil>"
+	}
+	return fmt.Sprintf("<call \"%s\">", ce.Exprs[0].InspectStr())
+}
+
+// CodeStr will return the code representation of the call expression.
+func (ce *CallExpr) CodeStr() string {
+	var sb strings.Builder
+	sb.WriteString("(")
+	for i, e := range ce.Exprs {
+		if i > 0 {
+			sb.WriteString(" ")
+		}
+		sb.WriteString(e.CodeStr())
+	}
+	sb.WriteString(")\n")
+	return sb.String()
 }
 
 // NewIfExpr builds a new if statement with the given condition and cases. The
@@ -368,32 +459,50 @@ func NewIfExpr(cond Expr, case1, case2 Expr) *IfExpr {
 		case2 = NewNilValue()
 	}
 	return &IfExpr{
-		cond:  cond,
-		case1: case1,
-		case2: case2,
+		Cond:  cond,
+		Case1: case1,
+		Case2: case2,
 	}
 }
 
 // Eval evaluates the if and returns the evaluated contents of the according
 // case.
 func (ie *IfExpr) Eval(ec *ExprContext) Value {
-	condV := ie.cond.Eval(ec)
+	condV := ie.Cond.Eval(ec)
 	asBool, isBool := condV.(*BoolValue)
 	if !isBool {
 		// fixme (bs): this should return an error
 		return NewNilValue()
 	}
 	if asBool.Get() {
-		return ie.case1.Eval(ec)
+		return ie.Case1.Eval(ec)
 	}
-	return ie.case2.Eval(ec)
+	return ie.Case2.Eval(ec)
+}
+
+// CodeStr will return the code representation of the if expression.
+func (ie *IfExpr) CodeStr() string {
+	var sb strings.Builder
+	sb.WriteString("(if ")
+	sb.WriteString(ie.Cond.CodeStr())
+	sb.WriteString("\n")
+	sb.WriteString(ie.Case1.CodeStr())
+	sb.WriteString("\n")
+	sb.WriteString(ie.Case2.CodeStr())
+	sb.WriteString(")\n")
+	return sb.String()
+}
+
+// InspectStr returns a user-readable representation of the if expression.
+func (ie *IfExpr) InspectStr() string {
+	return fmt.Sprintf("(todo)")
 }
 
 // NewFnExpr builds a new function expression with the given arguments and body.
 func NewFnExpr(args []Arg, body []Expr) *FnExpr {
 	return &FnExpr{
-		args: args,
-		body: body,
+		Args: args,
+		Body: body,
 	}
 }
 
@@ -401,22 +510,26 @@ func NewFnExpr(args []Arg, body []Expr) *FnExpr {
 // execute the function; it must be evaluated within a call to be actually
 // executed.
 func (fe *FnExpr) Eval(parentEc *ExprContext) Value {
-	return NewFuncValue(func(
+	// fixme (bs): I don't think this should be returning a func value per se.
+	// This is a good case where perhaps having some plain functions in place of
+	// the strict AST would make sense; but I'm not sure yet.
+
+	return NewFuncValue("", func(
 		callEc *ExprContext,
 		callExprs ...Expr,
 	) (Value, error) {
 
-		if len(fe.args) != len(callExprs) {
+		if len(fe.Args) != len(callExprs) {
 			return nil, fmt.Errorf("expected %d arguments in call; got %d",
-				len(fe.args), len(callExprs))
+				len(fe.Args), len(callExprs))
 		}
 		evalEc := parentEc.SubContext(nil)
-		for i, arg := range fe.args {
+		for i, arg := range fe.Args {
 			evalEc.Add(arg.Ident, callExprs[i].Eval(callEc))
 		}
 
 		var evalV Value
-		for _, e := range fe.body {
+		for _, e := range fe.Body {
 			evalV = e.Eval(evalEc)
 		}
 		if evalV == nil {
@@ -424,4 +537,60 @@ func (fe *FnExpr) Eval(parentEc *ExprContext) Value {
 		}
 		return evalV, nil
 	})
+}
+
+// CodeStr will return the code representation of the fn expression.
+func (fe *FnExpr) CodeStr() string {
+	// fixme (bs): implement
+
+	var sb strings.Builder
+	sb.WriteString("(fn (")
+	for i, a := range fe.Args {
+		if i > 0 {
+			sb.WriteString(" ")
+		}
+		sb.WriteString(a.Ident)
+	}
+	sb.WriteString(")\n")
+
+	for _, e := range fe.Body {
+		sb.WriteString(e.CodeStr())
+	}
+	sb.WriteString(")\n")
+	return sb.String()
+}
+
+// InspectStr returns a user-readable representation of the function expression.
+func (fe *FnExpr) InspectStr() string {
+	// ques (bs): what should this be? I'd say the name and the arg list. The
+	// names not strictly known here though; so maybe just the arg list?
+	var sb strings.Builder
+	sb.WriteString("fn (")
+	for i, a := range fe.Args {
+		if i > 0 {
+			sb.WriteString(" ")
+		}
+		sb.WriteString(a.Ident)
+	}
+	sb.WriteString(")")
+	return sb.String()
+}
+
+// Eval will assign the underlying value to the ident on the context, and return
+// the value.
+func (le *LetExpr) Eval(ec *ExprContext) Value {
+	identStr := le.Ident.Get()
+	v := le.Value.Eval(ec)
+	ec.Add(identStr, v)
+	return v
+}
+
+// CodeStr will return the code representation of the let expression.
+func (le *LetExpr) CodeStr() string {
+	return fmt.Sprintf("(let %s %s)", le.Ident.Get(), le.Value.CodeStr())
+}
+
+// InspectStr returns a user-readable representation of the let expression.
+func (le *LetExpr) InspectStr() string {
+	return fmt.Sprintf("<assign \"%s\">", le.Ident.Str)
 }

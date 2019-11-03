@@ -74,9 +74,8 @@ func assertAsCell(t *testing.T, v Value) *CellValue {
 func assertCellValue(t *testing.T, v Value, expectedL, expectedR Value) {
 	t.Helper()
 	asCell := assertAsCell(t, v)
-	l, r := asCell.Get()
 	// note (bs): not 100% convinced this will work well. Let's play around and
 	// see if it is sane enough to be useful.
-	require.EqualValues(t, expectedL, l, "left values should be equal")
-	require.EqualValues(t, expectedR, r, "right values should be equal")
+	require.EqualValues(t, expectedL, asCell.Left, "left values should be equal")
+	require.EqualValues(t, expectedR, asCell.Right, "right values should be equal")
 }
