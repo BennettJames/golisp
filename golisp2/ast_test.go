@@ -157,13 +157,13 @@ func Test_ident(t *testing.T) {
 		},
 	}
 
-	v1 := NewIdentValue("a").Eval(ec)
+	v1 := mustEval(t, NewIdentValue("a"), ec)
 	assertStringValue(t, v1, "a")
 
-	v2 := NewIdentValue("b").Eval(ec)
+	v2 := mustEval(t, NewIdentValue("b"), ec)
 	assertStringValue(t, v2, "b")
 
-	v3 := NewIdentValue("d").Eval(ec)
+	v3 := mustEval(t, NewIdentValue("d"), ec)
 	assertNilValue(t, v3)
 }
 
@@ -180,149 +180,155 @@ func Test_parenExpr(t *testing.T) {
 			"b": NewNumberValue(2),
 		},
 	}
-	v := NewCallExpr(
-		NewIdentValue("add"),
-		NewIdentValue("a"),
-		NewIdentValue("b"),
+	v := mustEval(t,
 		NewCallExpr(
-			NewIdentValue("sub"),
-			NewNumberValue(3),
+			NewIdentValue("add"),
+			NewIdentValue("a"),
 			NewIdentValue("b"),
+			NewCallExpr(
+				NewIdentValue("sub"),
+				NewNumberValue(3),
+				NewIdentValue("b"),
+			),
 		),
-	).Eval(ec)
+		ec,
+	)
 	assertNumValue(t, v, 4)
 }
 
 func Test_numComparison(t *testing.T) {
 
 	t.Run("eq", func(t *testing.T) {
-		v1 := NewCallExpr(
-			NewFuncValue("", eqNumFn),
-			NewNumberValue(1),
-			NewNumberValue(1),
-		).Eval(nil)
+		v1 := mustEval(t,
+			NewCallExpr(
+				NewFuncValue("", eqNumFn),
+				NewNumberValue(1),
+				NewNumberValue(1),
+			),
+			nil)
 		assertBoolValue(t, v1, true)
 
-		v2 := NewCallExpr(
-			NewFuncValue("", eqNumFn),
-			NewNumberValue(1),
-			NewNumberValue(2),
-		).Eval(nil)
+		v2 := mustEval(t,
+			NewCallExpr(
+				NewFuncValue("", eqNumFn),
+				NewNumberValue(1),
+				NewNumberValue(2),
+			), nil)
 		assertBoolValue(t, v2, false)
 
 	})
 
 	t.Run("gt", func(t *testing.T) {
-		v1 := NewCallExpr(
+		v1 := mustEval(t, NewCallExpr(
 			NewFuncValue("", gtNumFn),
 			NewNumberValue(1),
 			NewNumberValue(1),
-		).Eval(nil)
+		), nil)
 		assertBoolValue(t, v1, false)
 
-		v2 := NewCallExpr(
+		v2 := mustEval(t, NewCallExpr(
 			NewFuncValue("", gtNumFn),
 			NewNumberValue(1),
 			NewNumberValue(2),
-		).Eval(nil)
+		), nil)
 		assertBoolValue(t, v2, false)
 
-		v3 := NewCallExpr(
+		v3 := mustEval(t, NewCallExpr(
 			NewFuncValue("", gtNumFn),
 			NewNumberValue(2),
 			NewNumberValue(1),
-		).Eval(nil)
+		), nil)
 		assertBoolValue(t, v3, true)
 	})
 
 	t.Run("lt", func(t *testing.T) {
-		v1 := NewCallExpr(
+		v1 := mustEval(t, NewCallExpr(
 			NewFuncValue("", ltNumFn),
 			NewNumberValue(1),
 			NewNumberValue(1),
-		).Eval(nil)
+		), nil)
 		assertBoolValue(t, v1, false)
 
-		v2 := NewCallExpr(
+		v2 := mustEval(t, NewCallExpr(
 			NewFuncValue("", ltNumFn),
 			NewNumberValue(1),
 			NewNumberValue(2),
-		).Eval(nil)
+		), nil)
 		assertBoolValue(t, v2, true)
 
-		v3 := NewCallExpr(
+		v3 := mustEval(t, NewCallExpr(
 			NewFuncValue("", ltNumFn),
 			NewNumberValue(2),
 			NewNumberValue(1),
-		).Eval(nil)
+		), nil)
 		assertBoolValue(t, v3, false)
 	})
 
 	t.Run("gte", func(t *testing.T) {
-		v1 := NewCallExpr(
+		v1 := mustEval(t, NewCallExpr(
 			NewFuncValue("", gteNumFn),
 			NewNumberValue(1),
 			NewNumberValue(1),
-		).Eval(nil)
+		), nil)
 		assertBoolValue(t, v1, true)
 
-		v2 := NewCallExpr(
+		v2 := mustEval(t, NewCallExpr(
 			NewFuncValue("", gteNumFn),
 			NewNumberValue(1),
 			NewNumberValue(2),
-		).Eval(nil)
+		), nil)
 		assertBoolValue(t, v2, false)
 
-		v3 := NewCallExpr(
+		v3 := mustEval(t, NewCallExpr(
 			NewFuncValue("", gteNumFn),
 			NewNumberValue(2),
 			NewNumberValue(1),
-		).Eval(nil)
+		), nil)
 		assertBoolValue(t, v3, true)
 	})
 
 	t.Run("lte", func(t *testing.T) {
-		v1 := NewCallExpr(
+		v1 := mustEval(t, NewCallExpr(
 			NewFuncValue("", lteNumFn),
 			NewNumberValue(1),
 			NewNumberValue(1),
-		).Eval(nil)
+		), nil)
 		assertBoolValue(t, v1, true)
 
-		v2 := NewCallExpr(
+		v2 := mustEval(t, NewCallExpr(
 			NewFuncValue("", lteNumFn),
 			NewNumberValue(1),
 			NewNumberValue(2),
-		).Eval(nil)
+		), nil)
 		assertBoolValue(t, v2, true)
 
-		v3 := NewCallExpr(
+		v3 := mustEval(t, NewCallExpr(
 			NewFuncValue("", lteNumFn),
 			NewNumberValue(2),
 			NewNumberValue(1),
-		).Eval(nil)
+		), nil)
 		assertBoolValue(t, v3, false)
 	})
 }
 
 func Test_ifExpr(t *testing.T) {
-	v1 := NewIfExpr(
+	v1 := mustEval(t, NewIfExpr(
 		NewBoolValue(true),
 		NewNumberValue(1),
 		NewNumberValue(2),
-	).Eval(nil)
+	), nil)
 	assertNumValue(t, v1, 1)
-	v2 := NewIfExpr(
+	v2 := mustEval(t, NewIfExpr(
 		NewBoolValue(false),
 		NewNumberValue(1),
 		NewNumberValue(2),
-	).Eval(nil)
+	), nil)
 	assertNumValue(t, v2, 2)
 }
 
 func Test_fnExpr(t *testing.T) {
 
-	doubleAdd := NewFnExpr(
+	doubleAdd := mustEval(t, NewFnExpr(
 		[]Arg{
 			Arg{
 				Ident: "a",
@@ -339,7 +345,7 @@ func Test_fnExpr(t *testing.T) {
 				NewIdentValue("b"),
 			),
 		},
-	).Eval(nil)
+	), nil)
 	asFn := assertAsFunc(t, doubleAdd)
 
 	v, e := asFn.Exec(nil, NewNumberValue(1), NewNumberValue(2))
@@ -369,7 +375,7 @@ func Test_CodeStr(t *testing.T) {
 			),
 		)
 		reparsedExpr := printAndReparse(t, baseAST)
-		require.Equal(t, baseAST, reparsedExpr.Eval(BuiltinContext()))
+		require.Equal(t, baseAST, mustEval(t, reparsedExpr, nil))
 	})
 
 	t.Run("if", func(t *testing.T) {
@@ -391,8 +397,7 @@ func Test_CodeStr(t *testing.T) {
 			),
 		}
 		reparsedExpr := printAndReparse(t, baseAST)
-		v := reparsedExpr.Eval(BuiltinContext())
-		assertNumValue(t, v, 2)
+		assertNumValue(t, mustEval(t, reparsedExpr, nil), 2)
 	})
 
 	t.Run("let", func(t *testing.T) {
@@ -425,7 +430,7 @@ func Test_CodeStr(t *testing.T) {
 			NewNumberValue(5),
 		)
 		reparsedExpr := printAndReparse(t, baseAST)
-		v := reparsedExpr.Eval(BuiltinContext().SubContext(map[string]Value{
+		v := mustEval(t, reparsedExpr, BuiltinContext().SubContext(map[string]Value{
 			"add": NewFuncValue("add", addFn),
 		}))
 		assertNumValue(t, v, 6)

@@ -6,6 +6,16 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func mustEval(t *testing.T, e Expr, ec *ExprContext) Value {
+	t.Helper()
+	if ec == nil {
+		ec = BuiltinContext()
+	}
+	v, err := e.Eval(ec)
+	require.NoError(t, err)
+	return v
+}
+
 func assertAsNum(t *testing.T, v Value) *NumberValue {
 	t.Helper()
 	require.NotNil(t, v)

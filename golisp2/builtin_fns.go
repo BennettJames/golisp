@@ -26,7 +26,10 @@ func BuiltinContext() *ExprContext {
 func concatFn(c *ExprContext, exprs ...Expr) (Value, error) {
 	var sb strings.Builder
 	for _, e := range exprs {
-		v := e.Eval(c)
+		v, err := e.Eval(c)
+		if err != nil {
+			return nil, err
+		}
 		asStr, isStr := v.(*StringValue)
 		if !isStr {
 			return nil, fmt.Errorf("non-number value in add: %v", v.InspectStr())
@@ -42,8 +45,14 @@ func consFn(c *ExprContext, exprs ...Expr) (Value, error) {
 	if len(exprs) > 2 {
 		return nil, fmt.Errorf("cons expects 0-2 argument; got %d", len(exprs))
 	}
-	v1 := exprs[0].Eval(c)
-	v2 := exprs[1].Eval(c)
+	v1, err := exprs[0].Eval(c)
+	if err != nil {
+		return nil, err
+	}
+	v2, err := exprs[1].Eval(c)
+	if err != nil {
+		return nil, err
+	}
 	return NewCellValue(v1, v2), nil
 }
 
@@ -51,7 +60,10 @@ func carFn(c *ExprContext, exprs ...Expr) (Value, error) {
 	if len(exprs) != 1 {
 		return nil, fmt.Errorf("car expects 1 argument; got %d", len(exprs))
 	}
-	v := exprs[0].Eval(c)
+	v, err := exprs[0].Eval(c)
+	if err != nil {
+		return nil, err
+	}
 	asNode, isNode := v.(*CellValue)
 	if !isNode {
 		// note (bs): this was already commented on elsewhere, but I don't think
@@ -65,7 +77,10 @@ func cdrFn(c *ExprContext, exprs ...Expr) (Value, error) {
 	if len(exprs) != 1 {
 		return nil, fmt.Errorf("cdr expects 1 argument; got %d", len(exprs))
 	}
-	v := exprs[0].Eval(c)
+	v, err := exprs[0].Eval(c)
+	if err != nil {
+		return nil, err
+	}
 	asNode, isNode := v.(*CellValue)
 	if !isNode {
 		return nil, fmt.Errorf("cdr expects a cell type, got %v", asNode)
@@ -79,7 +94,10 @@ func andFn(c *ExprContext, exprs ...Expr) (Value, error) {
 	}
 	total := true
 	for _, e := range exprs {
-		v := e.Eval(c)
+		v, err := e.Eval(c)
+		if err != nil {
+			return nil, err
+		}
 		asBool, isBool := v.(*BoolValue)
 		if !isBool {
 			return nil, fmt.Errorf("and expects bool types, got %v", v)
@@ -96,7 +114,10 @@ func orFn(c *ExprContext, exprs ...Expr) (Value, error) {
 	}
 	total := false
 	for _, e := range exprs {
-		v := e.Eval(c)
+		v, err := e.Eval(c)
+		if err != nil {
+			return nil, err
+		}
 		asBool, isBool := v.(*BoolValue)
 		if !isBool {
 			return nil, fmt.Errorf("or expects bool types, got %v", v)
@@ -111,7 +132,10 @@ func notFn(c *ExprContext, exprs ...Expr) (Value, error) {
 	if len(exprs) != 1 {
 		return nil, fmt.Errorf("not expects 1 argument; got %d", len(exprs))
 	}
-	v := exprs[0].Eval(c)
+	v, err := exprs[0].Eval(c)
+	if err != nil {
+		return nil, err
+	}
 	asBool, isBool := v.(*BoolValue)
 	if !isBool {
 		return nil, fmt.Errorf("not expects bool argument, got %v", v)
@@ -126,7 +150,10 @@ func notFn(c *ExprContext, exprs ...Expr) (Value, error) {
 func addFn(c *ExprContext, exprs ...Expr) (Value, error) {
 	total := float64(0)
 	for _, e := range exprs {
-		v := e.Eval(c)
+		v, err := e.Eval(c)
+		if err != nil {
+			return nil, err
+		}
 		asNum, isNum := v.(*NumberValue)
 		if !isNum {
 			// note (bs): eventually, try to make a version of this error that's more
@@ -152,7 +179,10 @@ func subFn(c *ExprContext, exprs ...Expr) (Value, error) {
 
 	total := float64(0)
 	for i, e := range exprs {
-		v := e.Eval(c)
+		v, err := e.Eval(c)
+		if err != nil {
+			return nil, err
+		}
 		asNum, isNum := v.(*NumberValue)
 		if !isNum {
 			// note (bs): eventually, try to make a version of this error that's more
@@ -174,7 +204,10 @@ func subFn(c *ExprContext, exprs ...Expr) (Value, error) {
 func multFn(c *ExprContext, exprs ...Expr) (Value, error) {
 	total := float64(1)
 	for _, e := range exprs {
-		v := e.Eval(c)
+		v, err := e.Eval(c)
+		if err != nil {
+			return nil, err
+		}
 		asNum, isNum := v.(*NumberValue)
 		if !isNum {
 			return nil, fmt.Errorf("non-number value in add: %v", asNum.InspectStr())
@@ -189,7 +222,10 @@ func multFn(c *ExprContext, exprs ...Expr) (Value, error) {
 func divFn(c *ExprContext, exprs ...Expr) (Value, error) {
 	total := float64(1)
 	for i, e := range exprs {
-		v := e.Eval(c)
+		v, err := e.Eval(c)
+		if err != nil {
+			return nil, err
+		}
 		asNum, isNum := v.(*NumberValue)
 		if !isNum {
 			return nil, fmt.Errorf("non-number value in add: %v", asNum.InspectStr())
@@ -213,8 +249,14 @@ func eqNumFn(ec *ExprContext, exprs ...Expr) (Value, error) {
 	if len(exprs) != 2 {
 		return nil, fmt.Errorf("eq expects 2 arguments; got %d", len(exprs))
 	}
-	v1 := exprs[0].Eval(ec)
-	v2 := exprs[1].Eval(ec)
+	v1, err := exprs[0].Eval(ec)
+	if err != nil {
+		return nil, err
+	}
+	v2, err := exprs[1].Eval(ec)
+	if err != nil {
+		return nil, err
+	}
 	v1AsNum, v1IsNum := v1.(*NumberValue)
 	v2AsNum, v2IsNum := v2.(*NumberValue)
 	if !v1IsNum {
@@ -230,8 +272,14 @@ func gtNumFn(ec *ExprContext, exprs ...Expr) (Value, error) {
 	if len(exprs) != 2 {
 		return nil, fmt.Errorf("gt expects 2 arguments; got %d", len(exprs))
 	}
-	v1 := exprs[0].Eval(ec)
-	v2 := exprs[1].Eval(ec)
+	v1, err := exprs[0].Eval(ec)
+	if err != nil {
+		return nil, err
+	}
+	v2, err := exprs[1].Eval(ec)
+	if err != nil {
+		return nil, err
+	}
 	v1AsNum, v1IsNum := v1.(*NumberValue)
 	v2AsNum, v2IsNum := v2.(*NumberValue)
 	if !v1IsNum {
@@ -247,8 +295,14 @@ func ltNumFn(ec *ExprContext, exprs ...Expr) (Value, error) {
 	if len(exprs) != 2 {
 		return nil, fmt.Errorf("lt expects 2 arguments; got %d", len(exprs))
 	}
-	v1 := exprs[0].Eval(ec)
-	v2 := exprs[1].Eval(ec)
+	v1, err := exprs[0].Eval(ec)
+	if err != nil {
+		return nil, err
+	}
+	v2, err := exprs[1].Eval(ec)
+	if err != nil {
+		return nil, err
+	}
 	v1AsNum, v1IsNum := v1.(*NumberValue)
 	v2AsNum, v2IsNum := v2.(*NumberValue)
 	if !v1IsNum {
@@ -264,8 +318,14 @@ func gteNumFn(ec *ExprContext, exprs ...Expr) (Value, error) {
 	if len(exprs) != 2 {
 		return nil, fmt.Errorf("gte expects 2 arguments; got %d", len(exprs))
 	}
-	v1 := exprs[0].Eval(ec)
-	v2 := exprs[1].Eval(ec)
+	v1, err := exprs[0].Eval(ec)
+	if err != nil {
+		return nil, err
+	}
+	v2, err := exprs[1].Eval(ec)
+	if err != nil {
+		return nil, err
+	}
 	v1AsNum, v1IsNum := v1.(*NumberValue)
 	v2AsNum, v2IsNum := v2.(*NumberValue)
 	if !v1IsNum {
@@ -281,8 +341,14 @@ func lteNumFn(ec *ExprContext, exprs ...Expr) (Value, error) {
 	if len(exprs) != 2 {
 		return nil, fmt.Errorf("lte expects 2 arguments; got %d", len(exprs))
 	}
-	v1 := exprs[0].Eval(ec)
-	v2 := exprs[1].Eval(ec)
+	v1, err := exprs[0].Eval(ec)
+	if err != nil {
+		return nil, err
+	}
+	v2, err := exprs[1].Eval(ec)
+	if err != nil {
+		return nil, err
+	}
 	v1AsNum, v1IsNum := v1.(*NumberValue)
 	v2AsNum, v2IsNum := v2.(*NumberValue)
 	if !v1IsNum {

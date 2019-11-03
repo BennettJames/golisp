@@ -11,7 +11,7 @@ type (
 	Expr interface {
 		// Eval will evaluate the underlying expression, and return the value (if
 		// any) that was calculated and returned.
-		Eval(*ExprContext) Value
+		Eval(*ExprContext) (Value, error)
 
 		// CodeStr will return the code representation of the given expression.
 		CodeStr() string
@@ -175,12 +175,12 @@ func (iv *IdentValue) InspectStr() string {
 // should be a "severe error" that bubbles back and most likely halts execution.
 // It's *possible* the right way to handle that is by creating a modified value
 // interface that can directly support the notion of error.
-func (iv *IdentValue) Eval(ec *ExprContext) Value {
+func (iv *IdentValue) Eval(ec *ExprContext) (Value, error) {
 	v, ok := ec.Resolve(iv.Val)
 	if !ok {
-		return NewNilValue()
+		return NewNilValue(), nil
 	}
-	return v
+	return v, nil
 }
 
 // CodeStr will return the code representation of the ident value.
@@ -201,8 +201,8 @@ func (nv *NumberValue) InspectStr() string {
 }
 
 // Eval just returns itself.
-func (nv *NumberValue) Eval(*ExprContext) Value {
-	return nv
+func (nv *NumberValue) Eval(*ExprContext) (Value, error) {
+	return nv, nil
 }
 
 // CodeStr will return the code representation of the number value.
@@ -227,10 +227,10 @@ func (nv *NilValue) InspectStr() string {
 }
 
 // Eval returns the nil value.
-func (nv *NilValue) Eval(*ExprContext) Value {
+func (nv *NilValue) Eval(*ExprContext) (Value, error) {
 	// note (bs): not sure about this. In general, I feel like eval needs to be
 	// more intelligent
-	return nv
+	return nv, nil
 }
 
 // CodeStr will return the code representation of the nil value.
@@ -251,8 +251,8 @@ func (sv *StringValue) InspectStr() string {
 }
 
 // Eval returns the string value.
-func (sv *StringValue) Eval(*ExprContext) Value {
-	return sv
+func (sv *StringValue) Eval(*ExprContext) (Value, error) {
+	return sv, nil
 }
 
 // CodeStr will return the code representation of the string value.
@@ -277,8 +277,8 @@ func (bv *BoolValue) InspectStr() string {
 }
 
 // Eval returns the bool value.
-func (bv *BoolValue) Eval(*ExprContext) Value {
-	return bv
+func (bv *BoolValue) Eval(*ExprContext) (Value, error) {
+	return bv, nil
 }
 
 // CodeStr will return the code representation of the boolean value.
@@ -308,8 +308,8 @@ func (fv *FuncValue) InspectStr() string {
 }
 
 // Eval evaluates the function using the provided context.
-func (fv *FuncValue) Eval(ec *ExprContext) Value {
-	return fv
+func (fv *FuncValue) Eval(ec *ExprContext) (Value, error) {
+	return fv, nil
 }
 
 // Exec executes the underlying function with the given context and arguments.
@@ -338,8 +338,8 @@ func NewCellValue(left, right Value) *CellValue {
 }
 
 // Eval returns the cell.
-func (cv *CellValue) Eval(*ExprContext) Value {
-	return cv
+func (cv *CellValue) Eval(*ExprContext) (Value, error) {
+	return cv, nil
 }
 
 // InspectStr outputs the contents of all the cells.
@@ -363,26 +363,25 @@ func NewCallExpr(exprs ...Expr) *CallExpr {
 }
 
 // Eval will evaluate the expression and return its results.
-func (ce *CallExpr) Eval(ec *ExprContext) Value {
+func (ce *CallExpr) Eval(ec *ExprContext) (Value, error) {
 	if len(ce.Exprs) == 0 {
-		return NewNilValue()
+		return NewNilValue(), nil
 	}
 
-	v1 := ce.Exprs[0].Eval(ec)
+	v1, v1Err := ce.Exprs[0].Eval(ec)
+	if v1Err != nil {
+		return nil, v1Err
+	}
 	asFn, isFn := v1.(*FuncValue)
 	if !isFn {
 		if len(ce.Exprs) == 1 {
-			return v1
+			return v1, nil
 		}
-		// fixme (bs): this needs to return an error. Again, either eval needs to be
-		// modified to explicitly return (value, error), or Value's
-		// signature/behavior needs to be modified to support the notion of an error.
-		return nil
+		// todo (bs): improve this error
+		return nil, fmt.Errorf("A call with more than 1 value must start with a function")
 	}
 
-	value, err := asFn.Exec(ec, ce.Exprs[1:]...)
-	var _ = err // fixme (bs): again, need to handle error passback
-	return value
+	return asFn.Exec(ec, ce.Exprs[1:]...)
 }
 
 // InspectStr returns a user-readable representation of the call expression.
@@ -425,12 +424,14 @@ func NewIfExpr(cond Expr, case1, case2 Expr) *IfExpr {
 
 // Eval evaluates the if and returns the evaluated contents of the according
 // case.
-func (ie *IfExpr) Eval(ec *ExprContext) Value {
-	condV := ie.Cond.Eval(ec)
+func (ie *IfExpr) Eval(ec *ExprContext) (Value, error) {
+	condV, condVErr := ie.Cond.Eval(ec)
+	if condVErr != nil {
+		return nil, condVErr
+	}
 	asBool, isBool := condV.(*BoolValue)
 	if !isBool {
-		// fixme (bs): this should return an error
-		return NewNilValue()
+		return nil, fmt.Errorf("if must be given a boolean condition in the first argument")
 	}
 	if asBool.Val {
 		return ie.Case1.Eval(ec)
@@ -467,7 +468,7 @@ func NewFnExpr(args []Arg, body []Expr) *FnExpr {
 // Eval returns an evaluate-able function value. Note that this does *not*
 // execute the function; it must be evaluated within a call to be actually
 // executed.
-func (fe *FnExpr) Eval(parentEc *ExprContext) Value {
+func (fe *FnExpr) Eval(parentEc *ExprContext) (Value, error) {
 	// fixme (bs): I don't think this should be returning a func value per se.
 	// This is a good case where perhaps having some plain functions in place of
 	// the strict AST would make sense; but I'm not sure yet.
@@ -483,18 +484,26 @@ func (fe *FnExpr) Eval(parentEc *ExprContext) Value {
 		}
 		evalEc := parentEc.SubContext(nil)
 		for i, arg := range fe.Args {
-			evalEc.Add(arg.Ident, callExprs[i].Eval(callEc))
+			v, err := callExprs[i].Eval(callEc)
+			if err != nil {
+				return nil, err
+			}
+			evalEc.Add(arg.Ident, v)
 		}
 
 		var evalV Value
 		for _, e := range fe.Body {
-			evalV = e.Eval(evalEc)
+			v, err := e.Eval(evalEc)
+			if err != nil {
+				return nil, err
+			}
+			evalV = v
 		}
 		if evalV == nil {
 			evalV = NewNilValue()
 		}
 		return evalV, nil
-	})
+	}), nil
 }
 
 // CodeStr will return the code representation of the fn expression.
@@ -536,11 +545,14 @@ func (fe *FnExpr) InspectStr() string {
 
 // Eval will assign the underlying value to the ident on the context, and return
 // the value.
-func (le *LetExpr) Eval(ec *ExprContext) Value {
+func (le *LetExpr) Eval(ec *ExprContext) (Value, error) {
 	identStr := le.Ident.Val
-	v := le.Value.Eval(ec)
+	v, err := le.Value.Eval(ec)
+	if err != nil {
+		return nil, err
+	}
 	ec.Add(identStr, v)
-	return v
+	return v, nil
 }
 
 // CodeStr will return the code representation of the let expression.

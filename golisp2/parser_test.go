@@ -14,7 +14,7 @@ func Test_ParseTokens(t *testing.T) {
 		exprs, exprsErr := ParseTokens(ts)
 		require.NoError(t, exprsErr)
 		require.Equal(t, len(exprs), 1)
-		return exprs[0].Eval(BuiltinContext())
+		return mustEval(t, exprs[0], BuiltinContext())
 	}
 
 	t.Run("basic", func(t *testing.T) {

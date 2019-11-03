@@ -19,7 +19,10 @@ func ExecString(str string) (string, error) {
 
 	var sb strings.Builder
 	for _, e := range exprs {
-		v := e.Eval(c)
+		v, err := e.Eval(c)
+		if err != nil {
+			return sb.String(), err
+		}
 		sb.WriteString(v.InspectStr())
 		sb.WriteByte('\n')
 	}
