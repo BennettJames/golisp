@@ -1,10 +1,15 @@
 package golisp2
 
 import (
+	"strings"
 	"testing"
+
+	"github.com/stretchr/testify/require"
 )
 
-func Test_TokenizeString(t *testing.T) {
+func Test_Tokenization(t *testing.T) {
+	fName := "testFile.l"
+
 	testCases := []struct {
 		Name     string
 		Input    string
@@ -188,7 +193,7 @@ func Test_TokenizeString(t *testing.T) {
 				t.Skip()
 			}
 
-			tokens := TokenizeString(c.Input)
+			tokens := tokenizeString(fName, c.Input)
 
 			// note (bs): in this case, it might be better to still perform iteration
 			// for the shared length, but then error afterwards with whatever
@@ -200,17 +205,56 @@ func Test_TokenizeString(t *testing.T) {
 
 			for tokenI, expectedV := range c.Output {
 				actualV := tokens[tokenI]
-				if expectedV.Typ != actualV.Typ {
-					// note (bs): this will be kinda inscrutable as it's not properly
-					// "strung"
-					t.Fatalf("Mismatched token types at index %d [expected=%s] [actual=%s]",
-						tokenI, expectedV.Typ, actualV.Typ)
-				}
-				if expectedV.Value != actualV.Value {
-					t.Fatalf("Mismatched token values at index %d [expected=%s] [actual=%s]",
-						tokenI, expectedV.Value, actualV.Value)
-				}
+
+				require.Equalf(t, expectedV.Typ, actualV.Typ,
+					"mismatched types at index %d", tokenI)
+				require.Equalf(t, expectedV.Value, actualV.Value,
+					"mismatched values at index %d", tokenI)
 			}
 		})
 	}
+
+	t.Run("positionTest", func(t *testing.T) {
+		makePos := func(c, r int) ScannerPosition {
+			return ScannerPosition{
+				SourceFile: fName,
+				Col:        c,
+				Row:        r,
+			}
+		}
+
+		actualTokens := tokenizeString(fName, "12\n  34")
+		expectedTokens := []ScannedToken{
+			ScannedToken{
+				Typ:   NumberTT,
+				Value: "12",
+				Pos:   makePos(1, 1),
+			},
+			ScannedToken{
+				Typ:   NumberTT,
+				Value: "34",
+				Pos:   makePos(3, 2),
+			},
+		}
+		require.Equal(t, expectedTokens, actualTokens)
+	})
+}
+
+// tokenizeString converts the provided string to a list of tokens.
+func tokenizeString(srcName, str string) []ScannedToken {
+	tokens := []ScannedToken{}
+
+	cs := NewRuneScanner(srcName, strings.NewReader(str))
+	ts := NewTokenScanner(cs)
+	for !ts.Done() {
+		nextT := ts.Next()
+		if nextT == nil {
+			break
+		}
+		tokens = append(tokens, *nextT)
+		if nextT.Typ == InvalidTT {
+			break
+		}
+	}
+	return tokens
 }

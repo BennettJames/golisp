@@ -359,7 +359,8 @@ func Test_CodeStr(t *testing.T) {
 	// it, and returns the re-parsed expression. Anything unexpected will result
 	// in a test failure.
 	printAndReparse := func(t *testing.T, e Expr) Expr {
-		ts := NewTokenScanner(NewRuneScanner(strings.NewReader(e.CodeStr())))
+		r := strings.NewReader(e.CodeStr())
+		ts := NewTokenScanner(NewRuneScanner("testfile", r))
 		exprs, exprsErr := ParseTokens(ts)
 		require.NoError(t, exprsErr)
 		require.Equal(t, 1, len(exprs))

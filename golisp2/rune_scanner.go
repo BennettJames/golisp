@@ -5,17 +5,30 @@ import (
 	"io"
 )
 
-// RuneScanner is used to iteratively read a source for characters.
-type RuneScanner struct {
-	err error
-	r   rune
-	buf *bufio.Reader
-}
+type (
+	// RuneScanner is used to iteratively read a source for characters.
+	RuneScanner struct {
+		err error
+		r   rune
+		pos ScannerPosition
+		buf *bufio.Reader
+	}
+
+	// ScannerPosition contains location information for runes and tokens.
+	ScannerPosition struct {
+		SourceFile string
+		Col, Row   int
+	}
+)
 
 // NewRuneScanner initializes a RuneScanner around the given string.
-func NewRuneScanner(src io.Reader) *RuneScanner {
+func NewRuneScanner(srcName string, src io.Reader) *RuneScanner {
 	return &RuneScanner{
 		buf: bufio.NewReader(src),
+		pos: ScannerPosition{
+			SourceFile: srcName,
+			Row:        1,
+		},
 	}
 }
 
@@ -29,6 +42,10 @@ func (rs *RuneScanner) Advance() {
 	// note (bs): technically possible this value is not valid and a
 	// unicode.ReplacementChar is returned. If so, possible that should be handled
 	// here.
+	//
+	// Also: I'm sorta inclined to deliberately error out on \0. It's really weird
+	// for that to be in a source file, and I sorta implicitly use '\0' here as a
+	// zero value to indicate either done or uninitialized.
 	if rs.err != nil {
 		return
 	}
@@ -37,7 +54,18 @@ func (rs *RuneScanner) Advance() {
 		rs.err = err
 		return
 	}
+	if rs.r == '\n' {
+		rs.pos.Row++
+		rs.pos.Col = 1
+	} else {
+		rs.pos.Col++
+	}
 	rs.r = r
+}
+
+// Pos returns the current location of the scanner relative to it's source.
+func (rs *RuneScanner) Pos() ScannerPosition {
+	return rs.pos
 }
 
 // Done indicates if the scanner has reached completion.

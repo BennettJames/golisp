@@ -1,28 +1,8 @@
 package golisp2
 
 import (
-	"strings"
 	"unicode"
 )
-
-// TokenizeString converts the provided string to a list of tokens.
-func TokenizeString(str string) []ScannedToken {
-	tokens := []ScannedToken{}
-
-	cs := NewRuneScanner(strings.NewReader(str))
-	ts := NewTokenScanner(cs)
-	for !ts.Done() {
-		nextT := ts.Next()
-		if nextT == nil {
-			break
-		}
-		tokens = append(tokens, *nextT)
-		if nextT.Typ == InvalidTT {
-			break
-		}
-	}
-	return tokens
-}
 
 type (
 	// TokenScanner reads over an input source of characters, transforming them
@@ -135,13 +115,18 @@ func scanNextToken(s *subTokenScanner) *ScannedToken {
 		tryParseIdent,
 	}
 
+	startPos := s.src.Pos()
+
 	for _, p := range tryParsers {
 		if t := p(s); t != nil {
+			t.Pos = startPos
 			return t
 		}
 	}
 
-	return s.Complete(InvalidTT)
+	invalidT := s.Complete(InvalidTT)
+	invalidT.Pos = startPos
+	return invalidT
 }
 
 func tryParseOpenParen(s *subTokenScanner) *ScannedToken {

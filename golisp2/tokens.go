@@ -12,6 +12,7 @@ type (
 	ScannedToken struct {
 		Typ   TokenType
 		Value string
+		Pos   ScannerPosition
 	}
 )
 

@@ -1,11 +1,14 @@
 package golisp2
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
 )
 
+// mustEval executes the given expression in the context, and asserts there is
+// no error. Returns the subsequent value.
 func mustEval(t *testing.T, e Expr, ec *ExprContext) Value {
 	t.Helper()
 	if ec == nil {
@@ -14,6 +17,39 @@ func mustEval(t *testing.T, e Expr, ec *ExprContext) Value {
 	v, err := e.Eval(ec)
 	require.NoError(t, err)
 	return v
+}
+
+// evalStrToVal will parse the string, assert that exactly one expression is
+// returned, evaluate it and return the result.
+func evalStrToVal(t *testing.T, str string) Value {
+	t.Helper()
+	ts := NewTokenScanner(NewRuneScanner("testfile", strings.NewReader(str)))
+	exprs, exprsErr := ParseTokens(ts)
+	require.NoError(t, exprsErr)
+	require.Equal(t, len(exprs), 1)
+	return mustEval(t, exprs[0], BuiltinContext())
+}
+
+// evalStrToVal will parse the string, assert that exactly one expression is
+// returned, evaluate it, assert it's an error, and return it.
+func evalStrToErr(t *testing.T, str string) error {
+	t.Helper()
+	ts := NewTokenScanner(NewRuneScanner("testfile", strings.NewReader(str)))
+	exprs, exprsErr := ParseTokens(ts)
+	require.NoError(t, exprsErr)
+	require.Equal(t, len(exprs), 1)
+	_, err := exprs[0].Eval(BuiltinContext())
+	require.Error(t, err)
+	return err
+}
+
+// parseStrToErr will parse the string, and assert that it results in an error.
+func parseStrToErr(t *testing.T, str string) error {
+	t.Helper()
+	ts := NewTokenScanner(NewRuneScanner("testfile", strings.NewReader(str)))
+	_, exprsErr := ParseTokens(ts)
+	require.Error(t, exprsErr)
+	return exprsErr
 }
 
 func assertAsNum(t *testing.T, v Value) *NumberValue {
