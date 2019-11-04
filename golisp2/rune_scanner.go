@@ -52,6 +52,7 @@ func (rs *RuneScanner) Advance() {
 	r, _, err := rs.buf.ReadRune()
 	if err != nil {
 		rs.err = err
+		rs.r = 0
 		return
 	}
 	if rs.r == '\n' {

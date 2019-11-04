@@ -11,20 +11,13 @@ type (
 	Expr interface {
 		// Eval will evaluate the underlying expression, and return the value (if
 		// any) that was calculated and returned.
-		Eval(*ExprContext) (Value, error)
+		Eval(*EvalContext) (Value, error)
 
 		// CodeStr will return the code representation of the given expression.
 		CodeStr() string
 
 		// InspectStr returns a printable version of the expression.
 		InspectStr() string
-	}
-
-	// ExprContext is the context on evaluation. It contains a resolvable set of
-	// identifiers->values that can be chained.
-	ExprContext struct {
-		parent *ExprContext
-		vals   map[string]Value
 	}
 
 	// Value represents any arbitrary value within the lisp interpreting
@@ -76,7 +69,7 @@ type (
 		Name string
 
 		// Fn is the function body the function value references.
-		Fn func(*ExprContext, ...Expr) (Value, error)
+		Fn func(*EvalContext, ...Expr) (Value, error)
 	}
 
 	// CellValue is a representation of a pair of values within the interpreted
@@ -92,8 +85,8 @@ type (
 		Exprs []Expr
 	}
 
-	// IfExpr is an if expression. The condition is evaluated: if true, case1 is
-	// evaluated and returned; if false
+	// IfExpr is an if expression. Cond is evaluated: if true, Case1 is
+	// evaluated and returned; if false Case2 will be.
 	IfExpr struct {
 		Cond         Expr
 		Case1, Case2 Expr
@@ -119,42 +112,6 @@ type (
 	}
 )
 
-// NewContext returns a new context with no parent. initialVals contains any
-// values that the context should be initialized with; it can be left nil.
-func NewContext(initialVals map[string]Value) *ExprContext {
-	vals := map[string]Value{}
-	for k, v := range initialVals {
-		vals[k] = v
-	}
-	return &ExprContext{
-		vals: vals,
-	}
-}
-
-// SubContext creates a new context with the current context as it's parent.
-func (ec *ExprContext) SubContext(initialVals map[string]Value) *ExprContext {
-	sub := NewContext(initialVals)
-	sub.parent = ec
-	return sub
-}
-
-// Add extends the current context with the provided value.
-func (ec *ExprContext) Add(ident string, val Value) {
-	ec.vals[ident] = val
-}
-
-// Resolve traverses the expr for the given ident. Will return it if found;
-// otherwise a nil value and "false".
-func (ec *ExprContext) Resolve(ident string) (Value, bool) {
-	if ec == nil {
-		return NewNilValue(), false
-	}
-	if v, ok := ec.vals[ident]; ok {
-		return v, true
-	}
-	return ec.parent.Resolve(ident)
-}
-
 // NewIdentValue instantiates a new identifier value with the given identifier
 // token.
 func NewIdentValue(ident string) *IdentValue {
@@ -175,7 +132,7 @@ func (iv *IdentValue) InspectStr() string {
 // should be a "severe error" that bubbles back and most likely halts execution.
 // It's *possible* the right way to handle that is by creating a modified value
 // interface that can directly support the notion of error.
-func (iv *IdentValue) Eval(ec *ExprContext) (Value, error) {
+func (iv *IdentValue) Eval(ec *EvalContext) (Value, error) {
 	v, ok := ec.Resolve(iv.Val)
 	if !ok {
 		return NewNilValue(), nil
@@ -201,7 +158,7 @@ func (nv *NumberValue) InspectStr() string {
 }
 
 // Eval just returns itself.
-func (nv *NumberValue) Eval(*ExprContext) (Value, error) {
+func (nv *NumberValue) Eval(*EvalContext) (Value, error) {
 	return nv, nil
 }
 
@@ -227,7 +184,7 @@ func (nv *NilValue) InspectStr() string {
 }
 
 // Eval returns the nil value.
-func (nv *NilValue) Eval(*ExprContext) (Value, error) {
+func (nv *NilValue) Eval(*EvalContext) (Value, error) {
 	// note (bs): not sure about this. In general, I feel like eval needs to be
 	// more intelligent
 	return nv, nil
@@ -251,7 +208,7 @@ func (sv *StringValue) InspectStr() string {
 }
 
 // Eval returns the string value.
-func (sv *StringValue) Eval(*ExprContext) (Value, error) {
+func (sv *StringValue) Eval(*EvalContext) (Value, error) {
 	return sv, nil
 }
 
@@ -277,7 +234,7 @@ func (bv *BoolValue) InspectStr() string {
 }
 
 // Eval returns the bool value.
-func (bv *BoolValue) Eval(*ExprContext) (Value, error) {
+func (bv *BoolValue) Eval(*EvalContext) (Value, error) {
 	return bv, nil
 }
 
@@ -292,7 +249,7 @@ func (bv *BoolValue) CodeStr() string {
 // NewFuncValue creates a function with the given value.
 func NewFuncValue(
 	name string,
-	fn func(*ExprContext, ...Expr) (Value, error),
+	fn func(*EvalContext, ...Expr) (Value, error),
 ) *FuncValue {
 	return &FuncValue{
 		Fn: fn,
@@ -308,12 +265,12 @@ func (fv *FuncValue) InspectStr() string {
 }
 
 // Eval evaluates the function using the provided context.
-func (fv *FuncValue) Eval(ec *ExprContext) (Value, error) {
+func (fv *FuncValue) Eval(ec *EvalContext) (Value, error) {
 	return fv, nil
 }
 
 // Exec executes the underlying function with the given context and arguments.
-func (fv *FuncValue) Exec(ec *ExprContext, exprs ...Expr) (Value, error) {
+func (fv *FuncValue) Exec(ec *EvalContext, exprs ...Expr) (Value, error) {
 	return fv.Fn(ec, exprs...)
 }
 
@@ -338,7 +295,7 @@ func NewCellValue(left, right Value) *CellValue {
 }
 
 // Eval returns the cell.
-func (cv *CellValue) Eval(*ExprContext) (Value, error) {
+func (cv *CellValue) Eval(*EvalContext) (Value, error) {
 	return cv, nil
 }
 
@@ -363,7 +320,7 @@ func NewCallExpr(exprs ...Expr) *CallExpr {
 }
 
 // Eval will evaluate the expression and return its results.
-func (ce *CallExpr) Eval(ec *ExprContext) (Value, error) {
+func (ce *CallExpr) Eval(ec *EvalContext) (Value, error) {
 	if len(ce.Exprs) == 0 {
 		return NewNilValue(), nil
 	}
@@ -424,7 +381,7 @@ func NewIfExpr(cond Expr, case1, case2 Expr) *IfExpr {
 
 // Eval evaluates the if and returns the evaluated contents of the according
 // case.
-func (ie *IfExpr) Eval(ec *ExprContext) (Value, error) {
+func (ie *IfExpr) Eval(ec *EvalContext) (Value, error) {
 	condV, condVErr := ie.Cond.Eval(ec)
 	if condVErr != nil {
 		return nil, condVErr
@@ -468,13 +425,13 @@ func NewFnExpr(args []Arg, body []Expr) *FnExpr {
 // Eval returns an evaluate-able function value. Note that this does *not*
 // execute the function; it must be evaluated within a call to be actually
 // executed.
-func (fe *FnExpr) Eval(parentEc *ExprContext) (Value, error) {
+func (fe *FnExpr) Eval(parentEc *EvalContext) (Value, error) {
 	// fixme (bs): I don't think this should be returning a func value per se.
 	// This is a good case where perhaps having some plain functions in place of
 	// the strict AST would make sense; but I'm not sure yet.
 
 	return NewFuncValue("", func(
-		callEc *ExprContext,
+		callEc *EvalContext,
 		callExprs ...Expr,
 	) (Value, error) {
 
@@ -545,7 +502,7 @@ func (fe *FnExpr) InspectStr() string {
 
 // Eval will assign the underlying value to the ident on the context, and return
 // the value.
-func (le *LetExpr) Eval(ec *ExprContext) (Value, error) {
+func (le *LetExpr) Eval(ec *EvalContext) (Value, error) {
 	identStr := le.Ident.Val
 	v, err := le.Value.Eval(ec)
 	if err != nil {

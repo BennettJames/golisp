@@ -2,125 +2,125 @@ package golisp2
 
 import (
 	"fmt"
+	"io"
 	"strconv"
 )
 
 // ParseTokens reads in the tokens, and converts them to a set of expressions.
 // Returns the set, and any parse errors that are encountered in the process.
 func ParseTokens(ts *TokenScanner) ([]Expr, error) {
-	exprs := []Expr{}
-	for !ts.Done() {
-		maybeNext := ts.Next()
-		if maybeNext == nil {
-			if ts.Done() {
-				break
-			} else {
-				return nil, fmt.Errorf("unexpected nil token")
-			}
-		}
-		next := *maybeNext
-
-		switch next.Typ {
-		case CommentTT:
-			continue
-		case OpenParenTT:
-			expr, exprErr := parseCallExpr(ts)
-			if exprErr != nil {
-				return nil, exprErr
-			}
-			exprs = append(exprs, expr)
-		default:
-			return nil, NewParseError("unexpected top level token", next)
-		}
+	ts.Advance() // initialize scan
+	exprs, exprsErr := maybeParseExprs(ts)
+	if exprsErr != nil {
+		return nil, exprsErr
+	}
+	if !ts.Done() {
+		// todo (bs): improve this error
+		return nil, fmt.Errorf("scan completed before end of input")
 	}
 	return exprs, nil
 }
 
-func parseCallExpr(ts *TokenScanner) (Expr, error) {
-
+// maybeParseExprs will read as many expressions as it can, until it hits EOF or
+// a close boundary character.
+func maybeParseExprs(ts *TokenScanner) ([]Expr, error) {
 	exprs := []Expr{}
-	for !ts.Done() {
-		maybeNext := ts.Next()
-		if maybeNext == nil {
-			break
+	for {
+		maybeExpr, maybeExprErr := maybeParseExpr(ts)
+		if maybeExprErr != nil {
+			return nil, maybeExprErr
 		}
-		next := *maybeNext
+		if maybeExpr == nil {
+			return exprs, nil
+		}
+		exprs = append(exprs, maybeExpr)
+	}
+}
 
-		switch next.Typ {
-		case CloseParenTT:
-			if len(exprs) > 0 {
-				// note (bs): this is awfully clumsy. I think it'd be better to actually
-				// send out a subparser to be responsible for handling built-ins/macros,
-				// but I'll worry about that later.
+// maybeParseExpr will attempt to read a complete expression from the scanner.
+// Will return an error if any problems are encountered. Will return (nil, nil)
+// if the scanner has no more expressions, or the end of a block is reached.
+func maybeParseExpr(ts *TokenScanner) (Expr, error) {
+	maybeNextToken := ts.Token()
+	if maybeNextToken == nil {
+		if ts.Err() != nil && ts.Err() != io.EOF {
+			// todo (bs): wrap error using go 1.13
+			return nil, ts.Err()
+		}
+		return nil, nil
+	}
+	nextToken := *maybeNextToken
 
-				// fixme (bs): if there is an error in any of these conversions, it
-				// (most likely) should be counted as a parse error. But: as they're
-				// pre-converted to expressions and expressions do not contain any
-				// information about source. Technically, I feel like this would be best
-				// solved with a "future feature" - expressions should contain a
-				// reference to their source. Then, when the error is encountered here
-				// or at runtime; it's easy to unwind the stack.
-				if asIdent, isIdent := exprs[0].(*IdentValue); isIdent {
-					switch asIdent.Val {
-					case "if":
-						return convertToIfExpr(exprs[1:])
-					case "fn":
-						return convertToFnExpr(exprs[1:])
-					case "let":
-						return convertToLetExpr(exprs[1:])
-					}
-				}
-			}
-			return NewCallExpr(exprs...), nil
+	switch nextToken.Typ {
+	case CloseParenTT:
+		return nil, nil
+	case OpenParenTT:
+		return tryParseCall(ts)
+	case IdentTT:
+		ts.Advance()
+		return parseIdentValue(nextToken)
+	case OpTT:
+		ts.Advance()
+		return parseOpValue(nextToken)
+	case NumberTT:
+		ts.Advance()
+		return parseNumberValue(nextToken)
+	case StringTT:
+		ts.Advance()
+		return parseStringValue(nextToken)
+	default:
+		return nil, NewParseError("invalid token", nextToken)
+	}
+}
 
-		case OpenParenTT:
-			subCall, subCallErr := parseCallExpr(ts)
-			if subCallErr != nil {
-				return nil, subCallErr
-			}
-			exprs = append(exprs, subCall)
+func tryParseCall(ts *TokenScanner) (Expr, error) {
+	maybeStartToken := ts.Token()
+	if maybeStartToken == nil {
+		return nil, fmt.Errorf("parse call called on empty scanner")
+	}
+	startToken := *maybeStartToken
+	if startToken.Typ != OpenParenTT {
+		return nil, NewParseError(
+			"call expression must start with open paren", startToken)
+	}
 
-		case IdentTT:
-			identV, identErr := parseIdentValue(next)
-			if identErr != nil {
-				return nil, identErr
-			}
-			exprs = append(exprs, identV)
-
-		case OpTT:
-			opFn, opFnErr := parseOpValue(next)
-			if opFnErr != nil {
-				return nil, opFnErr
-			}
-			exprs = append(exprs, opFn)
-
-		case NumberTT:
-			numV, numErr := parseNumberValue(next)
-			if numErr != nil {
-				return nil, numErr
-			}
-			exprs = append(exprs, numV)
-
-		case StringTT:
-			strV, strErr := parseStringValue(next)
-			if strErr != nil {
-				return nil, strErr
-			}
-			exprs = append(exprs, strV)
-
-		case CommentTT:
-			// do nothing
-
-		default:
-			return nil, NewParseError("invalid token", next)
+	ts.Advance()
+	maybeNextToken := ts.Token()
+	if maybeNextToken == nil {
+		return nil, NewParseError("parse ended inside of call", startToken)
+	}
+	nextToken := *maybeNextToken
+	if nextToken.Typ == IdentTT {
+		// note (bs): strongly consider making this a data structure; will make
+		// rejecting usages of reserved words as idents much easier
+		switch nextToken.Value {
+		case "if":
+			return tryParseIfTail(ts)
+		case "fn":
+			return tryParseFnTail(ts)
+		case "let":
+			return tryParseLetTail(ts)
+		case "defun":
+			panic("defun not implemented")
+		case "import":
+			panic("import not implemented")
 		}
 	}
 
-	// ques (bs): should this be considered a parse error? Right now, the
-	// type is fairly inflexible: it's strictly bound to tokens. Should it
-	// be expanded to include the possibility of *absence* of a token as the
-	// source of an error?
-	return nil, fmt.Errorf("encountered end mid-expression")
+	return tryParseCallTail(ts)
+}
+
+func tryParseCallTail(ts *TokenScanner) (Expr, error) {
+	bodyExprs, bodyExprsErr := maybeParseExprs(ts)
+	if bodyExprsErr != nil {
+		return nil, bodyExprsErr
+	}
+	if err := expectCallClose(ts); err != nil {
+		return nil, err
+	}
+	return &CallExpr{
+		Exprs: bodyExprs,
+	}, nil
 }
 
 func parseStringValue(token ScannedToken) (*StringValue, error) {
@@ -193,54 +193,174 @@ func parseOpValue(token ScannedToken) (*FuncValue, error) {
 	}
 }
 
-func convertToIfExpr(exprs []Expr) (*IfExpr, error) {
-	if len(exprs) == 0 {
-		return nil, fmt.Errorf("if requires a condition")
+func tryParseIfTail(ts *TokenScanner) (Expr, error) {
+	maybeStartToken := ts.Token()
+	if maybeStartToken == nil {
+		return nil, fmt.Errorf("tryParseIfTail called on empty scanner")
 	}
-	cond := exprs[0]
-	var left, right Expr
-	if len(exprs) > 1 {
-		left = exprs[1]
+	startToken := *maybeStartToken
+	if startToken.Typ != IdentTT || startToken.Value != "if" {
+		return nil, NewParseError("tryParseIfTail called on non-if", startToken)
 	}
-	if len(exprs) > 2 {
-		right = exprs[2]
+	ts.Advance()
+
+	ifBody, ifBodyErr := maybeParseExprs(ts)
+	if ifBodyErr != nil {
+		return nil, ifBodyErr
 	}
-	return NewIfExpr(cond, left, right), nil
+	var cond, case1, case2 Expr
+	if len(ifBody) == 0 {
+		return nil, NewParseError("if statement must have condition", startToken)
+	}
+	cond = ifBody[0]
+	if len(ifBody) > 1 {
+		case1 = ifBody[1]
+	}
+	if len(ifBody) > 2 {
+		case2 = ifBody[2]
+	}
+	if len(ifBody) > 3 {
+		return nil, NewParseError(
+			"if statement can have no more than 3 expressions", startToken)
+	}
+	if err := expectCallClose(ts); err != nil {
+		return nil, err
+	}
+
+	return &IfExpr{
+		Cond:  wrapNilExpr(cond),
+		Case1: wrapNilExpr(case1),
+		Case2: wrapNilExpr(case2),
+	}, nil
 }
 
-func convertToFnExpr(exprs []Expr) (*FnExpr, error) {
-	if len(exprs) == 0 {
-		return nil, fmt.Errorf("fn requires an argument list")
+func tryParseFnTail(ts *TokenScanner) (Expr, error) {
+	maybeStartToken := ts.Token()
+	if maybeStartToken == nil {
+		return nil, fmt.Errorf("tryParseFnTail called on empty scanner")
+	}
+	startToken := *maybeStartToken
+	if startToken.Typ != IdentTT || startToken.Value != "fn" {
+		return nil, NewParseError("tryParseFnTail called on non-fn", startToken)
+	}
+	ts.Advance()
+
+	args, argsErr := tryParseFnArgs(ts)
+	if argsErr != nil {
+		return nil, argsErr
+	}
+	bodyExprs, bodyExprsErr := maybeParseExprs(ts)
+	if bodyExprsErr != nil {
+		return nil, bodyExprsErr
+	}
+	if err := expectCallClose(ts); err != nil {
+		return nil, err
+	}
+
+	return &FnExpr{
+		Args: args,
+		Body: bodyExprs,
+	}, nil
+}
+
+func tryParseFnArgs(ts *TokenScanner) ([]Arg, error) {
+	if err := expectCallOpen(ts); err != nil {
+		return nil, err
 	}
 	args := []Arg{}
-	asCall, isCall := exprs[0].(*CallExpr)
-	if !isCall {
-		return nil, fmt.Errorf("fn requires an argument list as the first expr")
-	}
-	for _, e := range asCall.Exprs {
-		asIdent, isIdent := e.(*IdentValue)
-		if !isIdent {
-			return nil, fmt.Errorf("fn argument list must be all idents")
+	for {
+		maybeNextToken := ts.Token()
+		if maybeNextToken == nil {
+			// todo (bs): add proper parse error info here
+			return nil, fmt.Errorf("unexpected end of input")
 		}
-		args = append(args, Arg{
-			Ident: asIdent.Val,
-		})
+		nextToken := *maybeNextToken
+		ts.Advance()
+		switch nextToken.Typ {
+		case IdentTT:
+			args = append(args, Arg{
+				Ident: nextToken.Value,
+			})
+		case CloseParenTT:
+			return args, nil
+		default:
+			return nil, NewParseError("args can only contain idents", nextToken)
+		}
 	}
-	return NewFnExpr(args, exprs[1:]), nil
 }
 
-func convertToLetExpr(exprs []Expr) (Expr, error) {
-	if len(exprs) != 2 {
-		return nil, fmt.Errorf("let requires exactly two arguments")
+func tryParseLetTail(ts *TokenScanner) (Expr, error) {
+	maybeStartToken := ts.Token()
+	if maybeStartToken == nil {
+		return nil, fmt.Errorf("tryParseLetTail called on empty scanner")
 	}
-	asIdent, isIdent := exprs[0].(*IdentValue)
+	startToken := *maybeStartToken
+	if startToken.Typ != IdentTT || startToken.Value != "let" {
+		return nil, NewParseError("tryParseLetTail called on non-let", startToken)
+	}
+	ts.Advance()
+
+	letExprs, letExprsErr := maybeParseExprs(ts)
+	if letExprsErr != nil {
+		return nil, letExprsErr
+	}
+	if len(letExprs) != 2 {
+		return nil, NewParseError(
+			fmt.Sprintf("let expects 2 arguments, got %d",
+				len(letExprs)), startToken)
+	}
+	asIdent, isIdent := letExprs[0].(*IdentValue)
 	if !isIdent {
-		return nil, fmt.Errorf("let requires an ident as the first values")
+		return nil, NewParseError(
+			"let expects an ident as first argument", startToken)
 	}
-	valExpr := exprs[1]
+	val := letExprs[1]
+	if err := expectCallClose(ts); err != nil {
+		return nil, err
+	}
 
 	return &LetExpr{
 		Ident: asIdent,
-		Value: valExpr,
+		Value: val,
 	}, nil
+}
+
+// expectCallOpen will read a open paren from the scanner and advance, or
+// return an error.
+func expectCallOpen(ts *TokenScanner) error {
+	maybeNext := ts.Token()
+	if maybeNext == nil {
+		// todo (bs): turn into parse error w/ location info
+		return fmt.Errorf("unexpected end of input")
+	}
+	next := *maybeNext
+	if next.Typ != OpenParenTT {
+		return NewParseError("expected open paren", next)
+	}
+	ts.Advance()
+	return nil
+}
+
+// expectCallClose will read a close paren from the scanner and advance, or
+// return an error.
+func expectCallClose(ts *TokenScanner) error {
+	maybeNext := ts.Token()
+	if maybeNext == nil {
+		// todo (bs): turn into parse error w/ location info
+		return fmt.Errorf("unexpected end of input")
+	}
+	next := *maybeNext
+	if next.Typ != CloseParenTT {
+		return NewParseError("expected close paren", next)
+	}
+	ts.Advance()
+	return nil
+}
+
+// wrapNilExpr will return a nil expr if e is nil.
+func wrapNilExpr(e Expr) Expr {
+	if e == nil {
+		return NewNilValue()
+	}
+	return e
 }

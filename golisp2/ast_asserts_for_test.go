@@ -9,7 +9,7 @@ import (
 
 // mustEval executes the given expression in the context, and asserts there is
 // no error. Returns the subsequent value.
-func mustEval(t *testing.T, e Expr, ec *ExprContext) Value {
+func mustEval(t *testing.T, e Expr, ec *EvalContext) Value {
 	t.Helper()
 	if ec == nil {
 		ec = BuiltinContext()

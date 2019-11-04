@@ -7,7 +7,7 @@ import (
 
 // BuiltinContext returns a context that contains the full set of builtin
 // functions. Note this just includes built-in plain functions; not operators.
-func BuiltinContext() *ExprContext {
+func BuiltinContext() *EvalContext {
 	return NewContext(map[string]Value{
 		"concat": NewFuncValue("concat", concatFn),
 		"cons":   NewFuncValue("cons", consFn),
@@ -23,7 +23,7 @@ func BuiltinContext() *ExprContext {
 // Explicit, named built-ins
 //
 
-func concatFn(c *ExprContext, exprs ...Expr) (Value, error) {
+func concatFn(c *EvalContext, exprs ...Expr) (Value, error) {
 	var sb strings.Builder
 	for _, e := range exprs {
 		v, err := e.Eval(c)
@@ -41,7 +41,7 @@ func concatFn(c *ExprContext, exprs ...Expr) (Value, error) {
 	}, nil
 }
 
-func consFn(c *ExprContext, exprs ...Expr) (Value, error) {
+func consFn(c *EvalContext, exprs ...Expr) (Value, error) {
 	if len(exprs) > 2 {
 		return nil, fmt.Errorf("cons expects 0-2 argument; got %d", len(exprs))
 	}
@@ -56,7 +56,7 @@ func consFn(c *ExprContext, exprs ...Expr) (Value, error) {
 	return NewCellValue(v1, v2), nil
 }
 
-func carFn(c *ExprContext, exprs ...Expr) (Value, error) {
+func carFn(c *EvalContext, exprs ...Expr) (Value, error) {
 	if len(exprs) != 1 {
 		return nil, fmt.Errorf("car expects 1 argument; got %d", len(exprs))
 	}
@@ -73,7 +73,7 @@ func carFn(c *ExprContext, exprs ...Expr) (Value, error) {
 	return asNode.Left, nil
 }
 
-func cdrFn(c *ExprContext, exprs ...Expr) (Value, error) {
+func cdrFn(c *EvalContext, exprs ...Expr) (Value, error) {
 	if len(exprs) != 1 {
 		return nil, fmt.Errorf("cdr expects 1 argument; got %d", len(exprs))
 	}
@@ -88,7 +88,7 @@ func cdrFn(c *ExprContext, exprs ...Expr) (Value, error) {
 	return asNode.Right, nil
 }
 
-func andFn(c *ExprContext, exprs ...Expr) (Value, error) {
+func andFn(c *EvalContext, exprs ...Expr) (Value, error) {
 	if len(exprs) == 0 {
 		return nil, fmt.Errorf("and expects at least 1 argument; got %d", len(exprs))
 	}
@@ -108,7 +108,7 @@ func andFn(c *ExprContext, exprs ...Expr) (Value, error) {
 	return NewBoolValue(total), nil
 }
 
-func orFn(c *ExprContext, exprs ...Expr) (Value, error) {
+func orFn(c *EvalContext, exprs ...Expr) (Value, error) {
 	if len(exprs) == 0 {
 		return nil, fmt.Errorf("or expects at least 1 argument; got %d", len(exprs))
 	}
@@ -128,7 +128,7 @@ func orFn(c *ExprContext, exprs ...Expr) (Value, error) {
 	return NewBoolValue(total), nil
 }
 
-func notFn(c *ExprContext, exprs ...Expr) (Value, error) {
+func notFn(c *EvalContext, exprs ...Expr) (Value, error) {
 	if len(exprs) != 1 {
 		return nil, fmt.Errorf("not expects 1 argument; got %d", len(exprs))
 	}
@@ -147,7 +147,7 @@ func notFn(c *ExprContext, exprs ...Expr) (Value, error) {
 // Mathematical operator built-ins
 //
 
-func addFn(c *ExprContext, exprs ...Expr) (Value, error) {
+func addFn(c *EvalContext, exprs ...Expr) (Value, error) {
 	total := float64(0)
 	for _, e := range exprs {
 		v, err := e.Eval(c)
@@ -167,7 +167,7 @@ func addFn(c *ExprContext, exprs ...Expr) (Value, error) {
 	}, nil
 }
 
-func subFn(c *ExprContext, exprs ...Expr) (Value, error) {
+func subFn(c *EvalContext, exprs ...Expr) (Value, error) {
 	// ques (bs): should I still enforce minimum airity requirements here? I'm
 	// sorta inclined to say yes; but not sure how much I care about that right
 	// now. Particularly: that seems to get into deeper questions of type
@@ -201,7 +201,7 @@ func subFn(c *ExprContext, exprs ...Expr) (Value, error) {
 	}, nil
 }
 
-func multFn(c *ExprContext, exprs ...Expr) (Value, error) {
+func multFn(c *EvalContext, exprs ...Expr) (Value, error) {
 	total := float64(1)
 	for _, e := range exprs {
 		v, err := e.Eval(c)
@@ -219,7 +219,7 @@ func multFn(c *ExprContext, exprs ...Expr) (Value, error) {
 	}, nil
 }
 
-func divFn(c *ExprContext, exprs ...Expr) (Value, error) {
+func divFn(c *EvalContext, exprs ...Expr) (Value, error) {
 	total := float64(1)
 	for i, e := range exprs {
 		v, err := e.Eval(c)
@@ -245,7 +245,7 @@ func divFn(c *ExprContext, exprs ...Expr) (Value, error) {
 // Comparison operator built-in
 //
 
-func eqNumFn(ec *ExprContext, exprs ...Expr) (Value, error) {
+func eqNumFn(ec *EvalContext, exprs ...Expr) (Value, error) {
 	if len(exprs) != 2 {
 		return nil, fmt.Errorf("eq expects 2 arguments; got %d", len(exprs))
 	}
@@ -268,7 +268,7 @@ func eqNumFn(ec *ExprContext, exprs ...Expr) (Value, error) {
 	return NewBoolValue(v1AsNum.Val == v2AsNum.Val), nil
 }
 
-func gtNumFn(ec *ExprContext, exprs ...Expr) (Value, error) {
+func gtNumFn(ec *EvalContext, exprs ...Expr) (Value, error) {
 	if len(exprs) != 2 {
 		return nil, fmt.Errorf("gt expects 2 arguments; got %d", len(exprs))
 	}
@@ -291,7 +291,7 @@ func gtNumFn(ec *ExprContext, exprs ...Expr) (Value, error) {
 	return NewBoolValue(v1AsNum.Val > v2AsNum.Val), nil
 }
 
-func ltNumFn(ec *ExprContext, exprs ...Expr) (Value, error) {
+func ltNumFn(ec *EvalContext, exprs ...Expr) (Value, error) {
 	if len(exprs) != 2 {
 		return nil, fmt.Errorf("lt expects 2 arguments; got %d", len(exprs))
 	}
@@ -314,7 +314,7 @@ func ltNumFn(ec *ExprContext, exprs ...Expr) (Value, error) {
 	return NewBoolValue(v1AsNum.Val < v2AsNum.Val), nil
 }
 
-func gteNumFn(ec *ExprContext, exprs ...Expr) (Value, error) {
+func gteNumFn(ec *EvalContext, exprs ...Expr) (Value, error) {
 	if len(exprs) != 2 {
 		return nil, fmt.Errorf("gte expects 2 arguments; got %d", len(exprs))
 	}
@@ -337,7 +337,7 @@ func gteNumFn(ec *ExprContext, exprs ...Expr) (Value, error) {
 	return NewBoolValue(v1AsNum.Val >= v2AsNum.Val), nil
 }
 
-func lteNumFn(ec *ExprContext, exprs ...Expr) (Value, error) {
+func lteNumFn(ec *EvalContext, exprs ...Expr) (Value, error) {
 	if len(exprs) != 2 {
 		return nil, fmt.Errorf("lte expects 2 arguments; got %d", len(exprs))
 	}

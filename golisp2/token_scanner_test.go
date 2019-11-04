@@ -9,6 +9,13 @@ import (
 
 func Test_Tokenization(t *testing.T) {
 	fName := "testFile.l"
+	makePos := func(c, r int) ScannerPosition {
+		return ScannerPosition{
+			SourceFile: fName,
+			Col:        c,
+			Row:        r,
+		}
+	}
 
 	testCases := []struct {
 		Name     string
@@ -17,7 +24,7 @@ func Test_Tokenization(t *testing.T) {
 		Disabled bool
 	}{
 		{
-			Name:  "OpenClose",
+			Name:  "openClose",
 			Input: `(   )`,
 			Output: []ScannedToken{
 				ScannedToken{
@@ -31,7 +38,7 @@ func Test_Tokenization(t *testing.T) {
 			},
 		},
 		{
-			Name:  "Operators",
+			Name:  "operators",
 			Input: `+ - / * &^%!|<>= =<<<`,
 			Output: []ScannedToken{
 				ScannedToken{
@@ -61,8 +68,8 @@ func Test_Tokenization(t *testing.T) {
 			},
 		},
 		{
-			Name:  "BasicNumbers",
-			Input: `1 -2 57.123`,
+			Name:  "basicNumbers",
+			Input: `1 57.123 -2`,
 			Output: []ScannedToken{
 				ScannedToken{
 					Typ:   NumberTT,
@@ -70,16 +77,16 @@ func Test_Tokenization(t *testing.T) {
 				},
 				ScannedToken{
 					Typ:   NumberTT,
-					Value: "-2",
+					Value: "57.123",
 				},
 				ScannedToken{
 					Typ:   NumberTT,
-					Value: "57.123",
+					Value: "-2",
 				},
 			},
 		},
 		{
-			Name:  "TrailingDecimal",
+			Name:  "trailingDecimal",
 			Input: `(+ 57. )`,
 			Output: []ScannedToken{
 				ScannedToken{
@@ -123,7 +130,7 @@ func Test_Tokenization(t *testing.T) {
 			},
 		},
 		{
-			Name:  "BasicStr",
+			Name:  "basicStr",
 			Input: `"abc efg"`,
 			Output: []ScannedToken{
 				ScannedToken{
@@ -168,20 +175,62 @@ func Test_Tokenization(t *testing.T) {
 			`,
 			Output: []ScannedToken{
 				ScannedToken{
-					Typ:   CommentTT,
-					Value: "; 1",
-				},
-				ScannedToken{
 					Typ:   NumberTT,
 					Value: "2",
 				},
 				ScannedToken{
-					Typ:   CommentTT,
-					Value: "; 3",
-				},
-				ScannedToken{
 					Typ:   NumberTT,
 					Value: "4",
+				},
+			},
+		},
+		{
+			Name:  "badOperator",
+			Input: `--a`,
+			Output: []ScannedToken{
+				ScannedToken{
+					Typ:   InvalidTT,
+					Value: "--a",
+				},
+			},
+		},
+		{
+			Name:  "badNum",
+			Input: `123z`,
+			Output: []ScannedToken{
+				ScannedToken{
+					Typ:   InvalidTT,
+					Value: "123z",
+				},
+			},
+		},
+		{
+			Name:  "interruptedString",
+			Input: "\"abc\nefg\"",
+			Output: []ScannedToken{
+				ScannedToken{
+					Typ:   InvalidTT,
+					Value: "\"abc\n",
+				},
+			},
+		},
+		{
+			Name:  "smushedString",
+			Input: "\"abc\"123",
+			Output: []ScannedToken{
+				ScannedToken{
+					Typ:   InvalidTT,
+					Value: "\"abc\"1",
+				},
+			},
+		},
+		{
+			Name:  "badIdent",
+			Input: "abcd++",
+			Output: []ScannedToken{
+				ScannedToken{
+					Typ:   InvalidTT,
+					Value: "abcd+",
 				},
 			},
 		},
@@ -199,30 +248,22 @@ func Test_Tokenization(t *testing.T) {
 			// for the shared length, but then error afterwards with whatever
 			// missed/expected tokens there are
 			if len(tokens) != len(c.Output) {
-				t.Fatalf("Token length mismatch [expected=%+v] [actual=%+v]",
+				t.Fatalf("Token length mismatch \n[expected=%+v]\n[actual=%+v]",
 					c.Output, tokens)
 			}
 
 			for tokenI, expectedV := range c.Output {
 				actualV := tokens[tokenI]
 
-				require.Equalf(t, expectedV.Typ, actualV.Typ,
-					"mismatched types at index %d", tokenI)
 				require.Equalf(t, expectedV.Value, actualV.Value,
 					"mismatched values at index %d", tokenI)
+				require.Equalf(t, expectedV.Typ.String(), actualV.Typ.String(),
+					"mismatched types at index %d", tokenI)
 			}
 		})
 	}
 
 	t.Run("positionTest", func(t *testing.T) {
-		makePos := func(c, r int) ScannerPosition {
-			return ScannerPosition{
-				SourceFile: fName,
-				Col:        c,
-				Row:        r,
-			}
-		}
-
 		actualTokens := tokenizeString(fName, "12\n  34")
 		expectedTokens := []ScannedToken{
 			ScannedToken{
@@ -238,6 +279,18 @@ func Test_Tokenization(t *testing.T) {
 		}
 		require.Equal(t, expectedTokens, actualTokens)
 	})
+
+	t.Run("invalidChar", func(t *testing.T) {
+		actualTokens := tokenizeString(fName, "\x01")
+		expectedTokens := []ScannedToken{
+			ScannedToken{
+				Typ:   InvalidTT,
+				Value: "\x01",
+				Pos:   makePos(1, 1),
+			},
+		}
+		require.Equal(t, expectedTokens, actualTokens)
+	})
 }
 
 // tokenizeString converts the provided string to a list of tokens.
@@ -247,7 +300,8 @@ func tokenizeString(srcName, str string) []ScannedToken {
 	cs := NewRuneScanner(srcName, strings.NewReader(str))
 	ts := NewTokenScanner(cs)
 	for !ts.Done() {
-		nextT := ts.Next()
+		ts.Advance()
+		nextT := ts.Token()
 		if nextT == nil {
 			break
 		}

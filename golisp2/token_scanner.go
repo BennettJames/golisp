@@ -8,14 +8,17 @@ type (
 	// TokenScanner reads over an input source of characters, transforming them
 	// into tokens.
 	TokenScanner struct {
-		st *subTokenScanner
+		done bool
+		t    *ScannedToken
+		st   *subTokenScanner
 	}
 
 	// subTokenScanner is a private substructure for TokenScanner that does most
 	// of the work. It's responsible for buffering in-progress tokens.
 	subTokenScanner struct {
-		src *RuneScanner
-		buf []byte
+		src      *RuneScanner
+		buf      []byte
+		startPos ScannerPosition
 	}
 )
 
@@ -29,7 +32,7 @@ func NewTokenScanner(src *RuneScanner) *TokenScanner {
 // Done indicates if the underlying source has been exhausted, with no more
 // values to read.
 func (ts *TokenScanner) Done() bool {
-	return ts.st.Done()
+	return ts.done
 }
 
 // Err returns any error encountered while scanning the input. Will be io.EOF if
@@ -38,10 +41,27 @@ func (ts *TokenScanner) Err() error {
 	return ts.st.src.Err()
 }
 
-// Next will read in from the source until a new token is discovered. If the
-// source is empty, returns nil.
-func (ts *TokenScanner) Next() *ScannedToken {
-	return scanNextToken(ts.st)
+// Advance will read in the next token into the scanner.
+func (ts *TokenScanner) Advance() {
+	var maybeNextT *ScannedToken
+	for !ts.st.src.Done() {
+		maybeNextT = scanNextToken(ts.st)
+		if maybeNextT != nil && maybeNextT.Typ == CommentTT {
+			// skip comments; by definition they don't need to be parsed
+			continue
+		}
+		break
+	}
+	ts.t = maybeNextT
+	if maybeNextT == nil {
+		ts.done = true
+	}
+}
+
+// Token returns the token currently read by the scanner. Will be nil if
+// `Advance` has never been called.
+func (ts *TokenScanner) Token() *ScannedToken {
+	return ts.t
 }
 
 func newSubTokenScanner(src *RuneScanner) *subTokenScanner {
@@ -68,6 +88,9 @@ func (ss *subTokenScanner) Advance() {
 	if ss.src.Done() {
 		return
 	}
+	if len(ss.buf) == 0 {
+		ss.startPos = ss.src.Pos()
+	}
 	ss.buf = append(ss.buf, []byte(string(ss.src.Rune()))...)
 	ss.src.Advance()
 }
@@ -88,132 +111,116 @@ func (ss *subTokenScanner) Complete(t TokenType) *ScannedToken {
 	return &ScannedToken{
 		Typ:   t,
 		Value: val,
+		Pos:   ss.startPos,
 	}
 }
 
+// FlushInvalid writes the current rune to the buffer, and completes the scan
+// with an invlaid type. Useful for cases where the current rune is unscannable;
+// and the only thing to do is to advance and mark it invalid.
+func (ss *subTokenScanner) FlushInvalid() *ScannedToken {
+	ss.Advance()
+	return ss.Complete(InvalidTT)
+}
+
 func scanNextToken(s *subTokenScanner) *ScannedToken {
-	// Removed any leading whitespace
-	//
-	// note (bs): not sure the handling of null bytes here is really correct
+	// Remove any leading whitespace
 	for !s.src.Done() && (s.src.Rune() == '\x00' || unicode.IsSpace(s.src.Rune())) {
-		s.src.Advance()
+		s.Skip()
 	}
 	if s.src.Done() {
 		return nil
 	}
 
-	// note (bs): this is kinda inefficient - if you hoisted the initial chars,
-	// you could always map to the next function. Oh well.
-	tryParsers := []func(*subTokenScanner) *ScannedToken{
-		tryParseOpenParen,
-		tryParseCloseParen,
-		tryParseComment,
-		tryParseSignedValue,
-		tryParseOperator,
-		tryParseNumber,
-		tryParseString,
-		tryParseIdent,
-	}
-
-	startPos := s.src.Pos()
-
-	for _, p := range tryParsers {
-		if t := p(s); t != nil {
-			t.Pos = startPos
-			return t
-		}
-	}
-
-	invalidT := s.Complete(InvalidTT)
-	invalidT.Pos = startPos
-	return invalidT
-}
-
-func tryParseOpenParen(s *subTokenScanner) *ScannedToken {
 	if s.Rune() == '(' {
 		s.Advance()
 		return s.Complete(OpenParenTT)
-	}
-	return nil
-}
-
-func tryParseCloseParen(s *subTokenScanner) *ScannedToken {
-	if s.Rune() == ')' {
+	} else if s.Rune() == ')' {
 		s.Advance()
 		return s.Complete(CloseParenTT)
+	} else if s.Rune() == ';' {
+		return tryLexComment(s)
+	} else if s.Rune() == '-' {
+		return tryLexSignedValue(s)
+	} else if isOperatorRune(s.Rune()) {
+		return tryLexOperator(s)
+	} else if isDigitRune(s.Rune()) {
+		return tryLexNumber(s)
+	} else if isDoubleQuoteRune(s.Rune()) {
+		return tryLexString(s)
+	} else if isIdentStartRune(s.Rune()) {
+		return tryLexIdent(s)
 	}
-	return nil
+
+	return s.FlushInvalid()
 }
 
-func tryParseComment(s *subTokenScanner) *ScannedToken {
+func tryLexComment(s *subTokenScanner) *ScannedToken {
 	if s.Rune() != ';' {
-		return nil
+		return s.FlushInvalid()
 	}
+	s.Advance()
 	for !s.Done() && s.Rune() != '\n' {
 		s.Advance()
 	}
 	return s.Complete(CommentTT)
 }
 
-func tryParseSignedValue(s *subTokenScanner) *ScannedToken {
+func tryLexSignedValue(s *subTokenScanner) *ScannedToken {
 	if s.Rune() != '-' {
-		return nil
+		return s.FlushInvalid()
 	}
 	s.Advance()
-	if scannerAtDigit(s) {
-		s.Advance()
-		return parseNumber(s)
+	if isDigitRune(s.Rune()) {
+		return tryLexNumber(s)
 	}
-	return parseOperator(s)
+	return tryLexOperatorTail(s)
 }
 
-func tryParseOperator(s *subTokenScanner) *ScannedToken {
-	if scannerAtOperator(s) {
-		s.Advance()
-		return parseOperator(s)
+func tryLexOperator(s *subTokenScanner) *ScannedToken {
+	if !isOperatorRune(s.Rune()) {
+		return s.FlushInvalid()
 	}
-	return nil
+	s.Advance()
+	return tryLexOperatorTail(s)
 }
 
-func parseOperator(s *subTokenScanner) *ScannedToken {
+func tryLexOperatorTail(s *subTokenScanner) *ScannedToken {
 	for {
-		if scannerAtOperator(s) {
+		if isOperatorRune(s.Rune()) {
 			s.Advance()
 			continue
 		}
 		if scannerAtBoundary(s) {
 			return s.Complete(OpTT)
 		}
-		s.Advance()
-		return s.Complete(InvalidTT)
+		return s.FlushInvalid()
 	}
 }
 
-func tryParseNumber(s *subTokenScanner) *ScannedToken {
-	// note (bs): just does nonnegative integers right now; not very
-	// sophisticated.
-	if scannerAtDigit(s) {
-		s.Advance()
-		return parseNumber(s)
+func tryLexNumber(s *subTokenScanner) *ScannedToken {
+	// note (bs): this is a more general problem; but I think ensuring
+	// "at-least-one-digit" like this is pretty clumsy. Maybe there should be a
+	// generic way to "slurp down" chars of least a given length.
+	if !unicode.IsDigit(s.Rune()) {
+		return s.FlushInvalid()
 	}
-	return nil
-}
+	s.Advance()
 
-func parseNumber(s *subTokenScanner) *ScannedToken {
 	// note (bs): this still isn't *great* as far as division of responsibilities
 	// is concerned. May want a somewhat easier way to do things like specify a
-	// minimum number of digits to parse in a pass.
+	// minimum number of digits to lex in a pass.
 	for {
-		if scannerAtDigit(s) {
+		if isDigitRune(s.Rune()) {
 			s.Advance()
 			continue
 		}
 
 		// note (bs): this isn't technically correct, as it could tolerate multiple
 		// decimal points. Need to subdivide further for this to be right.
-		if scannerAtDecimal(s) {
+		if isDecimalRune(s.Rune()) {
 			s.Advance()
-			if scannerAtDigit(s) {
+			if isDigitRune(s.Rune()) {
 				s.Advance()
 				continue
 			}
@@ -223,34 +230,34 @@ func parseNumber(s *subTokenScanner) *ScannedToken {
 		if scannerAtBoundary(s) {
 			return s.Complete(NumberTT)
 		}
-		return s.Complete(InvalidTT)
+		return s.FlushInvalid()
 	}
 }
 
-func tryParseString(s *subTokenScanner) *ScannedToken {
-	if scannerAtDoubleQuote(s) {
-		s.Advance()
-		return parseString(s)
+func tryLexString(s *subTokenScanner) *ScannedToken {
+	if !isDoubleQuoteRune(s.Rune()) {
+		return s.FlushInvalid()
 	}
-	return nil
-}
+	s.Advance()
 
-func parseString(s *subTokenScanner) *ScannedToken {
 	for {
-		if s.Done() || scannerAtNewline(s) {
-			return s.Complete(InvalidTT)
+		if s.Done() || isNewlineRune(s.Rune()) {
+			return s.FlushInvalid()
 		}
 
-		if scannerAtDoubleQuote(s) {
+		if isDoubleQuoteRune(s.Rune()) {
 			s.Advance()
 			if scannerAtBoundary(s) {
 				return s.Complete(StringTT)
 			}
-			return s.Complete(InvalidTT)
+			return s.FlushInvalid()
 		}
 
 		// todo (bs): need to process escaped characters here. That will require a
-		// bit of an API shift: the tokenization process will need to
+		// bit of an API shift: the tokenization process will need to be a little
+		// more state-dependent and you'd need to be able to push specific runes
+		// onto the scanner; rather than strictly work off of a process of
+		// "advance".
 		//
 		// I suspect that this whole process should be replaced by some better
 		// sub-tokenization for each top-level element. I'd guess at that point,
@@ -262,40 +269,33 @@ func parseString(s *subTokenScanner) *ScannedToken {
 	}
 }
 
-func tryParseIdent(s *subTokenScanner) *ScannedToken {
-	if scannerAtIdentStart(s) {
-		s.Advance()
-		return parseIdent(s)
+func tryLexIdent(s *subTokenScanner) *ScannedToken {
+	if !isIdentStartRune(s.Rune()) {
+		return s.FlushInvalid()
 	}
-	return nil
-}
+	s.Advance()
 
-func parseIdent(s *subTokenScanner) *ScannedToken {
 	for {
 		if scannerAtBoundary(s) {
 			return s.Complete(IdentTT)
 		}
-		if scannerAtIdent(s) {
+		if isIdentRune(s.Rune()) {
 			s.Advance()
 			continue
 		}
-		s.Advance()
-		return s.Complete(InvalidTT)
+		return s.FlushInvalid()
 	}
 }
 
 func scannerAtBoundary(s *subTokenScanner) bool {
 	return s.Done() ||
-		scannerAtSpace(s) ||
-		scannerAtOpenParen(s) ||
-		scannerAtCloseParen(s)
+		isSpaceRune(s.Rune()) ||
+		isOpenParenRune(s.Rune()) ||
+		isCloseParenRune(s.Rune())
 }
 
-func scannerAtDigit(s *subTokenScanner) bool {
-	if s.Done() {
-		return false
-	}
-	switch s.Rune() {
+func isDigitRune(r rune) bool {
+	switch r {
 	case '0', '1', '2', '3', '4', '5', '6', '7', '8', '9':
 		return true
 	default:
@@ -303,11 +303,8 @@ func scannerAtDigit(s *subTokenScanner) bool {
 	}
 }
 
-func scannerAtOperator(s *subTokenScanner) bool {
-	if s.Done() {
-		return false
-	}
-	switch s.Rune() {
+func isOperatorRune(r rune) bool {
+	switch r {
 	case '-', '+', '/', '*', '&', '^', '%', '!', '|', '<', '>', '=':
 		return true
 	default:
@@ -315,61 +312,36 @@ func scannerAtOperator(s *subTokenScanner) bool {
 	}
 }
 
-func scannerAtDecimal(s *subTokenScanner) bool {
-	if s.Done() {
-		return false
-	}
-	return s.Rune() == '.'
+func isDecimalRune(r rune) bool {
+	return r == '.'
 }
 
-func scannerAtSpace(s *subTokenScanner) bool {
-	if s.Done() {
-		return false
-	}
-	return unicode.IsSpace(s.Rune())
+func isSpaceRune(r rune) bool {
+	return unicode.IsSpace(r)
 }
 
-func scannerAtOpenParen(s *subTokenScanner) bool {
-	if s.Done() {
-		return false
-	}
-	return s.Rune() == '('
+func isOpenParenRune(r rune) bool {
+	return r == '('
 }
 
-func scannerAtCloseParen(s *subTokenScanner) bool {
-	if s.Done() {
-		return false
-	}
-	return s.Rune() == ')'
+func isCloseParenRune(r rune) bool {
+	return r == ')'
 }
 
-func scannerAtDoubleQuote(s *subTokenScanner) bool {
-	if s.Done() {
-		return false
-	}
-	return s.Rune() == '"'
+func isDoubleQuoteRune(r rune) bool {
+	return r == '"'
 }
 
-func scannerAtNewline(s *subTokenScanner) bool {
-	if s.Done() {
-		return false
-	}
-	return s.Rune() == '\n'
+func isNewlineRune(r rune) bool {
+	return r == '\n'
 }
 
-func scannerAtIdentStart(s *subTokenScanner) bool {
-	if s.Done() {
-		return false
-	}
+func isIdentStartRune(r rune) bool {
 	// note (bs): not sure if this adequate/correct; but will probably be o.k. to
 	// start
-	return unicode.IsLetter(s.Rune())
+	return unicode.IsLetter(r)
 }
 
-func scannerAtIdent(s *subTokenScanner) bool {
-	if s.Done() {
-		return false
-	}
-	return scannerAtIdentStart(s) ||
-		unicode.IsDigit(s.Rune())
+func isIdentRune(r rune) bool {
+	return isIdentStartRune(r) || unicode.IsDigit(r)
 }

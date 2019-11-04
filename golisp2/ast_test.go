@@ -145,8 +145,8 @@ func Test_bool(t *testing.T) {
 
 func Test_ident(t *testing.T) {
 
-	ec := &ExprContext{
-		parent: &ExprContext{
+	ec := &EvalContext{
+		parent: &EvalContext{
 			vals: map[string]Value{
 				"a": NewStringValue("a"),
 			},
@@ -168,8 +168,8 @@ func Test_ident(t *testing.T) {
 }
 
 func Test_parenExpr(t *testing.T) {
-	ec := &ExprContext{
-		parent: &ExprContext{
+	ec := &EvalContext{
+		parent: &EvalContext{
 			vals: map[string]Value{
 				"add": NewFuncValue("", addFn),
 				"sub": NewFuncValue("", subFn),
