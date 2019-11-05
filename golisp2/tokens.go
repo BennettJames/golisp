@@ -17,8 +17,8 @@ type (
 )
 
 const (
-	// NoTT is just a dummy TokenType to occupy "0". Should never be used. if
-	// there's an un-tokenizable value scanned, it should be assigned UnknownTT.
+	// NoTT is an empty token type. Should never be used with an actual token; use
+	// "InvalidTT" to reflect a value that does not map to a type.
 	NoTT TokenType = iota
 
 	// InvalidTT represents a scanned value that is not a valid token type.
@@ -46,6 +46,7 @@ const (
 	CommentTT
 )
 
+// String is just a simple mapping to a human readable string for token types.
 func (tt TokenType) String() string {
 	switch tt {
 	case NoTT:

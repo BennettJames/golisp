@@ -39,13 +39,6 @@ func (rs *RuneScanner) Rune() rune {
 
 // Advance moves the scanner ahead one value,
 func (rs *RuneScanner) Advance() {
-	// note (bs): technically possible this value is not valid and a
-	// unicode.ReplacementChar is returned. If so, possible that should be handled
-	// here.
-	//
-	// Also: I'm sorta inclined to deliberately error out on \0. It's really weird
-	// for that to be in a source file, and I sorta implicitly use '\0' here as a
-	// zero value to indicate either done or uninitialized.
 	if rs.err != nil {
 		return
 	}
@@ -55,12 +48,23 @@ func (rs *RuneScanner) Advance() {
 		rs.r = 0
 		return
 	}
+
 	if rs.r == '\n' {
 		rs.pos.Row++
 		rs.pos.Col = 1
 	} else {
 		rs.pos.Col++
 	}
+
+	// note (bs): consider expanding the range of forbidden runes. Other things
+	// like replacement chars and certain control characters can cause trouble as
+	// well.
+	if r == 0 {
+		rs.r = 0
+		rs.err = NewForbiddenRuneError(r, rs.pos)
+		return
+	}
+
 	rs.r = r
 }
 

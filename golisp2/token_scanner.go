@@ -16,8 +16,13 @@ type (
 	// subTokenScanner is a private substructure for TokenScanner that does most
 	// of the work. It's responsible for buffering in-progress tokens.
 	subTokenScanner struct {
-		src      *RuneScanner
-		buf      []byte
+		src *RuneScanner
+
+		// buf holds a buffer of bytes that have been read from the scanner, but
+		// have not yet been turned into a token.
+		buf []byte
+
+		// startPos is the pos of the start of the buffer.
 		startPos ScannerPosition
 	}
 )
@@ -39,6 +44,11 @@ func (ts *TokenScanner) Done() bool {
 // the scan completed the input.
 func (ts *TokenScanner) Err() error {
 	return ts.st.src.Err()
+}
+
+// Pos returns the current location of the scan relative to it's source.
+func (ts *TokenScanner) Pos() ScannerPosition {
+	return ts.st.src.Pos()
 }
 
 // Advance will read in the next token into the scanner.

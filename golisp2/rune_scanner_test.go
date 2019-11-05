@@ -9,29 +9,9 @@ import (
 )
 
 func Test_RuneScanner(t *testing.T) {
-	t.Run("simple", func(t *testing.T) {
-		rs := NewRuneScanner("testfile", strings.NewReader("hi \x00 😊"))
-		expected := []rune{
-			'h',
-			'i',
-			' ',
-			'\x00',
-			' ',
-			'😊',
-		}
-		for _, expectedR := range expected {
-			rs.Advance()
-			require.False(t, rs.Done(), "unexpected end to scan")
-			require.Equal(t, expectedR, rs.Rune())
-		}
-		rs.Advance()
-		require.True(t, rs.Done(), "scanned should complete after everyting's read")
-		require.Equal(t, io.EOF, rs.Err())
-	})
-
-	t.Run("pos", func(t *testing.T) {
-		fName := "itsATestFile.l"
-		rs := NewRuneScanner(fName, strings.NewReader("(\n+ 1 2\n)"))
+	fName := "itsATestFile.l"
+	t.Run("basicScan", func(t *testing.T) {
+		rs := NewRuneScanner(fName, strings.NewReader("(\n+ 1 \t😊\n)"))
 		expected := []struct {
 			r        rune
 			col, row int
@@ -42,8 +22,9 @@ func Test_RuneScanner(t *testing.T) {
 			{' ', 2, 2},
 			{'1', 3, 2},
 			{' ', 4, 2},
-			{'2', 5, 2},
-			{'\n', 6, 2},
+			{'\t', 5, 2},
+			{'😊', 6, 2},
+			{'\n', 7, 2},
 			{')', 1, 3},
 		}
 		for _, e := range expected {
@@ -54,5 +35,22 @@ func Test_RuneScanner(t *testing.T) {
 			require.Equal(t, e.col, rs.Pos().Col)
 			require.Equal(t, e.row, rs.Pos().Row)
 		}
+		rs.Advance()
+		require.True(t, rs.Done(), "scanned should complete after everyting's read")
+		require.Equal(t, io.EOF, rs.Err())
+	})
+
+	t.Run("forbiddenChar", func(t *testing.T) {
+		rs := NewRuneScanner(fName, strings.NewReader("\x00abc"))
+		rs.Advance()
+		require.Error(t, rs.Err())
+		asForbidden, isForbidden := rs.Err().(*ForbiddenRuneError)
+		require.True(t, isForbidden)
+		require.Equal(t, '\x00', asForbidden.r)
+		require.Equal(t, ScannerPosition{
+			SourceFile: fName,
+			Col:        1,
+			Row:        1,
+		}, asForbidden.pos)
 	})
 }

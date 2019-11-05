@@ -1,6 +1,7 @@
 package golisp2
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"strconv"
@@ -9,14 +10,16 @@ import (
 // ParseTokens reads in the tokens, and converts them to a set of expressions.
 // Returns the set, and any parse errors that are encountered in the process.
 func ParseTokens(ts *TokenScanner) ([]Expr, error) {
-	ts.Advance() // initialize scan
+	ts.Advance() // initializes the scan
 	exprs, exprsErr := maybeParseExprs(ts)
 	if exprsErr != nil {
 		return nil, exprsErr
 	}
+	if ts.Err() != nil && !errors.Is(ts.Err(), io.EOF) {
+		return nil, fmt.Errorf("problem reading source: %w", ts.Err())
+	}
 	if !ts.Done() {
-		// todo (bs): improve this error
-		return nil, fmt.Errorf("scan completed before end of input")
+		return nil, NewParseEOFError("parse ended before EOF", ts.Pos())
 	}
 	return exprs, nil
 }
@@ -43,10 +46,6 @@ func maybeParseExprs(ts *TokenScanner) ([]Expr, error) {
 func maybeParseExpr(ts *TokenScanner) (Expr, error) {
 	maybeNextToken := ts.Token()
 	if maybeNextToken == nil {
-		if ts.Err() != nil && ts.Err() != io.EOF {
-			// todo (bs): wrap error using go 1.13
-			return nil, ts.Err()
-		}
 		return nil, nil
 	}
 	nextToken := *maybeNextToken
@@ -73,10 +72,12 @@ func maybeParseExpr(ts *TokenScanner) (Expr, error) {
 	}
 }
 
+// tryParseCall will attempt to parse a call statement from the current location
+// of the scanner.
 func tryParseCall(ts *TokenScanner) (Expr, error) {
 	maybeStartToken := ts.Token()
 	if maybeStartToken == nil {
-		return nil, fmt.Errorf("parse call called on empty scanner")
+		return nil, NewParseEOFError("parse on empty scanner", ts.Pos())
 	}
 	startToken := *maybeStartToken
 	if startToken.Typ != OpenParenTT {
@@ -110,6 +111,8 @@ func tryParseCall(ts *TokenScanner) (Expr, error) {
 	return tryParseCallTail(ts)
 }
 
+// tryParseCallTail will try to trace a function call. This assumes the first
+// paren has already been parsed.
 func tryParseCallTail(ts *TokenScanner) (Expr, error) {
 	bodyExprs, bodyExprsErr := maybeParseExprs(ts)
 	if bodyExprsErr != nil {
@@ -123,6 +126,7 @@ func tryParseCallTail(ts *TokenScanner) (Expr, error) {
 	}, nil
 }
 
+// parseStringValue converts the string token to a string value.
 func parseStringValue(token ScannedToken) (*StringValue, error) {
 	v := token.Value
 	if len(v) == 0 {
@@ -138,6 +142,7 @@ func parseStringValue(token ScannedToken) (*StringValue, error) {
 	return NewStringValue(v[leadI:tailI]), nil
 }
 
+// parseIdentValue converts the ident token to an ident value.
 func parseIdentValue(token ScannedToken) (Value, error) {
 	// todo (bs): this should search for certain reserved words, and reject them.
 	// e.g. any of the "structural builtins" like if, defun, let, etc.
@@ -154,18 +159,23 @@ func parseIdentValue(token ScannedToken) (Value, error) {
 	}
 }
 
+// parseNumberValue converts the number token to a number value.
 func parseNumberValue(token ScannedToken) (*NumberValue, error) {
 	// todo (bs): given that this is, you know, a *parser*, it's awfully clumsy to
 	// outsource the final number parsing to Go. The manual parse should be able
 	// to correctly map this to a number.
 	f, e := strconv.ParseFloat(token.Value, 64)
 	if e != nil {
-		// todo (bs): this should wrap the error
-		return nil, e
+		return nil, NewParseError(
+			fmt.Sprintf("could not parse number (%s) - %s", token.Value, e),
+			token,
+		)
 	}
 	return NewNumberValue(f), nil
 }
 
+// parseOpValue converts the operator token to a function value. If the operator
+// isn't supported, an error is returned.
 func parseOpValue(token ScannedToken) (*FuncValue, error) {
 	// todo (bs): strongly consider moving this to a map rather than a case
 	// statement
@@ -193,10 +203,12 @@ func parseOpValue(token ScannedToken) (*FuncValue, error) {
 	}
 }
 
+// tryParseIfTail will complete the parse of an if statement where the open
+// paren has already been scanned.
 func tryParseIfTail(ts *TokenScanner) (Expr, error) {
 	maybeStartToken := ts.Token()
 	if maybeStartToken == nil {
-		return nil, fmt.Errorf("tryParseIfTail called on empty scanner")
+		return nil, NewParseEOFError("parse on empty scanner", ts.Pos())
 	}
 	startToken := *maybeStartToken
 	if startToken.Typ != IdentTT || startToken.Value != "if" {
@@ -234,10 +246,12 @@ func tryParseIfTail(ts *TokenScanner) (Expr, error) {
 	}, nil
 }
 
+// tryParseIfTail will complete the parse of an function delcaration where the
+// open paren has already been scanned.
 func tryParseFnTail(ts *TokenScanner) (Expr, error) {
 	maybeStartToken := ts.Token()
 	if maybeStartToken == nil {
-		return nil, fmt.Errorf("tryParseFnTail called on empty scanner")
+		return nil, NewParseEOFError("parse on empty scanner", ts.Pos())
 	}
 	startToken := *maybeStartToken
 	if startToken.Typ != IdentTT || startToken.Value != "fn" {
@@ -263,6 +277,8 @@ func tryParseFnTail(ts *TokenScanner) (Expr, error) {
 	}, nil
 }
 
+// tryParseFnArgs will attempt to parse a set of function arguments from the
+// scanner. If a valid set of arguments are not found, an error is returned.
 func tryParseFnArgs(ts *TokenScanner) ([]Arg, error) {
 	if err := expectCallOpen(ts); err != nil {
 		return nil, err
@@ -272,7 +288,7 @@ func tryParseFnArgs(ts *TokenScanner) ([]Arg, error) {
 		maybeNextToken := ts.Token()
 		if maybeNextToken == nil {
 			// todo (bs): add proper parse error info here
-			return nil, fmt.Errorf("unexpected end of input")
+			return nil, NewParseEOFError("file ended in function args", ts.Pos())
 		}
 		nextToken := *maybeNextToken
 		ts.Advance()
@@ -289,10 +305,12 @@ func tryParseFnArgs(ts *TokenScanner) ([]Arg, error) {
 	}
 }
 
+// tryParseLetTail will complete the parse of a let statement where the open
+// paren has already been scanned.
 func tryParseLetTail(ts *TokenScanner) (Expr, error) {
 	maybeStartToken := ts.Token()
 	if maybeStartToken == nil {
-		return nil, fmt.Errorf("tryParseLetTail called on empty scanner")
+		return nil, NewParseEOFError("parse ended in let statement", ts.Pos())
 	}
 	startToken := *maybeStartToken
 	if startToken.Typ != IdentTT || startToken.Value != "let" {
@@ -330,8 +348,7 @@ func tryParseLetTail(ts *TokenScanner) (Expr, error) {
 func expectCallOpen(ts *TokenScanner) error {
 	maybeNext := ts.Token()
 	if maybeNext == nil {
-		// todo (bs): turn into parse error w/ location info
-		return fmt.Errorf("unexpected end of input")
+		return NewParseEOFError("unexpected end of input", ts.Pos())
 	}
 	next := *maybeNext
 	if next.Typ != OpenParenTT {
@@ -346,8 +363,7 @@ func expectCallOpen(ts *TokenScanner) error {
 func expectCallClose(ts *TokenScanner) error {
 	maybeNext := ts.Token()
 	if maybeNext == nil {
-		// todo (bs): turn into parse error w/ location info
-		return fmt.Errorf("unexpected end of input")
+		return NewParseEOFError("unexpected end of input", ts.Pos())
 	}
 	next := *maybeNext
 	if next.Typ != CloseParenTT {
