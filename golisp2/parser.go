@@ -130,7 +130,10 @@ func tryParseCallTail(ts *TokenScanner) (Expr, error) {
 func parseStringValue(token ScannedToken) (*StringValue, error) {
 	v := token.Value
 	if len(v) == 0 {
-		return NewStringValue(""), nil
+		return &StringValue{
+			Val: "",
+			Pos: token.Pos,
+		}, nil
 	}
 	leadI, tailI := 0, len(v)
 	if v[0] == '"' {
@@ -139,7 +142,10 @@ func parseStringValue(token ScannedToken) (*StringValue, error) {
 	if len(v) > 1 && v[len(v)-1] == '"' {
 		tailI = len(v) - 1
 	}
-	return NewStringValue(v[leadI:tailI]), nil
+	return &StringValue{
+		Val: v[leadI:tailI],
+		Pos: token.Pos,
+	}, nil
 }
 
 // parseIdentValue converts the ident token to an ident value.
@@ -149,13 +155,23 @@ func parseIdentValue(token ScannedToken) (Value, error) {
 
 	switch token.Value {
 	case "nil":
-		return NewNilValue(), nil
+		return &NilValue{
+			Pos: token.Pos,
+		}, nil
 	case "true":
-		return NewBoolValue(true), nil
+		return &BoolValue{
+			Val: true,
+			Pos: token.Pos,
+		}, nil
 	case "false":
-		return NewBoolValue(false), nil
+		return &BoolValue{
+			Val: false,
+		}, nil
 	default:
-		return NewIdentValue(token.Value), nil
+		return &IdentValue{
+			Val: token.Value,
+			Pos: token.Pos,
+		}, nil
 	}
 }
 
@@ -171,36 +187,35 @@ func parseNumberValue(token ScannedToken) (*NumberValue, error) {
 			token,
 		)
 	}
-	return NewNumberValue(f), nil
+	return &NumberValue{
+		Val: f,
+		Pos: token.Pos,
+	}, nil
 }
 
 // parseOpValue converts the operator token to a function value. If the operator
 // isn't supported, an error is returned.
 func parseOpValue(token ScannedToken) (*FuncValue, error) {
-	// todo (bs): strongly consider moving this to a map rather than a case
-	// statement
-	switch token.Value {
-	case "+":
-		return NewFuncValue("+", addFn), nil
-	case "-":
-		return NewFuncValue("-", subFn), nil
-	case "*":
-		return NewFuncValue("*", multFn), nil
-	case "/":
-		return NewFuncValue("/", divFn), nil
-	case "==":
-		return NewFuncValue("==", eqNumFn), nil
-	case "<":
-		return NewFuncValue("<", ltNumFn), nil
-	case ">":
-		return NewFuncValue(">", gtNumFn), nil
-	case "<=":
-		return NewFuncValue("<=", lteNumFn), nil
-	case ">=":
-		return NewFuncValue(">=", gteNumFn), nil
-	default:
-		return nil, NewParseError("unrecognized operator", token)
+	// note (bs): this should probably exist as a discrete value
+	opMap := map[string]func(*EvalContext, ...Expr) (Value, error){
+		"+":  addFn,
+		"-":  subFn,
+		"*":  multFn,
+		"/":  divFn,
+		"==": eqNumFn,
+		"<":  ltNumFn,
+		">":  gtNumFn,
+		"<=": lteNumFn,
+		">=": gteNumFn,
 	}
+	if fn, ok := opMap[token.Value]; ok {
+		return &FuncValue{
+			Name: token.Value,
+			Fn:   fn,
+			Pos:  token.Pos,
+		}, nil
+	}
+	return nil, NewParseError("unrecognized operator", token)
 }
 
 // tryParseIfTail will complete the parse of an if statement where the open
@@ -243,6 +258,7 @@ func tryParseIfTail(ts *TokenScanner) (Expr, error) {
 		Cond:  wrapNilExpr(cond),
 		Case1: wrapNilExpr(case1),
 		Case2: wrapNilExpr(case2),
+		Pos:   startToken.Pos,
 	}, nil
 }
 
@@ -274,6 +290,7 @@ func tryParseFnTail(ts *TokenScanner) (Expr, error) {
 	return &FnExpr{
 		Args: args,
 		Body: bodyExprs,
+		Pos:  startToken.Pos,
 	}, nil
 }
 
@@ -340,6 +357,7 @@ func tryParseLetTail(ts *TokenScanner) (Expr, error) {
 	return &LetExpr{
 		Ident: asIdent,
 		Value: val,
+		Pos:   startToken.Pos,
 	}, nil
 }
 

@@ -368,15 +368,18 @@ func Test_CodeStr(t *testing.T) {
 	}
 
 	t.Run("cell", func(t *testing.T) {
-		baseAST := NewCellValue(
-			NewNumberValue(1),
+		baseAST := NewCallExpr(
+			NewIdentValue("car"),
 			NewCellValue(
-				NewNumberValue(2),
-				nil,
+				NewNumberValue(1),
+				NewCellValue(
+					NewNumberValue(2),
+					nil,
+				),
 			),
 		)
 		reparsedExpr := printAndReparse(t, baseAST)
-		require.Equal(t, baseAST, mustEval(t, reparsedExpr, nil))
+		assertNumValue(t, mustEval(t, reparsedExpr, nil), 1)
 	})
 
 	t.Run("if", func(t *testing.T) {

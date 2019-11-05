@@ -18,6 +18,9 @@ type (
 
 		// InspectStr returns a printable version of the expression.
 		InspectStr() string
+
+		// SourcePos returns the location that the expression started in the source.
+		SourcePos() ScannerPosition
 	}
 
 	// Value represents any arbitrary value within the lisp interpreting
@@ -37,29 +40,34 @@ type (
 		// not just be a string. Arguably, that should have it's own datatype
 		// anyway.
 		Val string
+		Pos ScannerPosition
 	}
 
 	// NumberValue is a representation of a number value within the interpreted
 	// environment.
 	NumberValue struct {
 		Val float64
+		Pos ScannerPosition
 	}
 
 	// NilValue is a representation of an null value within the interpreted
 	// environment.
 	NilValue struct {
+		Pos ScannerPosition
 	}
 
 	// StringValue is a representation of a string within the interpreted
 	// environment.
 	StringValue struct {
 		Val string
+		Pos ScannerPosition
 	}
 
 	// BoolValue is a representation of a boolean within the interpreted
 	// environment.
 	BoolValue struct {
 		Val bool
+		Pos ScannerPosition
 	}
 
 	// FuncValue is a representation of a basic function within the interpreted
@@ -70,6 +78,8 @@ type (
 
 		// Fn is the function body the function value references.
 		Fn func(*EvalContext, ...Expr) (Value, error)
+
+		Pos ScannerPosition
 	}
 
 	// CellValue is a representation of a pair of values within the interpreted
@@ -77,12 +87,14 @@ type (
 	// operators.
 	CellValue struct {
 		Left, Right Value
+		Pos         ScannerPosition
 	}
 
 	// CallExpr is a function call. The first expression is treated as a function,
 	// with the remaining elements passed to it.
 	CallExpr struct {
 		Exprs []Expr
+		Pos   ScannerPosition
 	}
 
 	// IfExpr is an if expression. Cond is evaluated: if true, Case1 is
@@ -90,6 +102,7 @@ type (
 	IfExpr struct {
 		Cond         Expr
 		Case1, Case2 Expr
+		Pos          ScannerPosition
 	}
 
 	// FnExpr is a function definition expression. It has a set of arguments and a
@@ -97,6 +110,7 @@ type (
 	FnExpr struct {
 		Args []Arg
 		Body []Expr
+		Pos  ScannerPosition
 	}
 
 	// Arg is a single element in a function list.
@@ -109,6 +123,7 @@ type (
 	LetExpr struct {
 		Ident *IdentValue
 		Value Expr
+		Pos   ScannerPosition
 	}
 )
 
@@ -145,6 +160,11 @@ func (iv *IdentValue) CodeStr() string {
 	return iv.Val
 }
 
+// SourcePos is the location in source this value came from.
+func (iv *IdentValue) SourcePos() ScannerPosition {
+	return iv.Pos
+}
+
 // NewNumberValue instantiates a new number with the given value.
 func NewNumberValue(v float64) *NumberValue {
 	return &NumberValue{
@@ -168,6 +188,11 @@ func (nv *NumberValue) CodeStr() string {
 	// integers. Of course, that starts getting into the deeper issue of how just
 	// having floats is too primitive and there really need to be integers.
 	return fmt.Sprintf("%f", nv.Val)
+}
+
+// SourcePos is the location in source this value came from.
+func (nv *NumberValue) SourcePos() ScannerPosition {
+	return nv.Pos
 }
 
 // NewNilValue creates a new nil value.
@@ -195,6 +220,11 @@ func (nv *NilValue) CodeStr() string {
 	return fmt.Sprintf("nil")
 }
 
+// SourcePos is the location in source this value came from.
+func (nv *NilValue) SourcePos() ScannerPosition {
+	return nv.Pos
+}
+
 // NewStringValue creates a new string value from the given string.
 func NewStringValue(str string) *StringValue {
 	return &StringValue{
@@ -217,6 +247,11 @@ func (sv *StringValue) CodeStr() string {
 	// note (bs): this doesn't matter now as it's not supported, but just note
 	// that this doesn't work with multiline strings
 	return fmt.Sprintf("\"%s\"", sv.Val)
+}
+
+// SourcePos is the location in source this value came from.
+func (sv *StringValue) SourcePos() ScannerPosition {
+	return sv.Pos
 }
 
 // NewBoolValue creates a bool with the given value.
@@ -244,6 +279,11 @@ func (bv *BoolValue) CodeStr() string {
 		return "true"
 	}
 	return "false"
+}
+
+// SourcePos is the location in source this value came from.
+func (bv *BoolValue) SourcePos() ScannerPosition {
+	return bv.Pos
 }
 
 // NewFuncValue creates a function with the given value.
@@ -279,6 +319,11 @@ func (fv *FuncValue) CodeStr() string {
 	return fv.Name
 }
 
+// SourcePos is the location in source this value came from.
+func (fv *FuncValue) SourcePos() ScannerPosition {
+	return fv.Pos
+}
+
 // NewCellValue creates a cell with the given left/right values. Either can be
 // 'nil'.
 func NewCellValue(left, right Value) *CellValue {
@@ -308,6 +353,11 @@ func (cv *CellValue) InspectStr() string {
 // CodeStr will return the code representation of the cell value.
 func (cv *CellValue) CodeStr() string {
 	return fmt.Sprintf("(cons %s %s)\n", cv.Left.CodeStr(), cv.Right.CodeStr())
+}
+
+// SourcePos is the location in source this value came from.
+func (cv *CellValue) SourcePos() ScannerPosition {
+	return cv.Pos
 }
 
 // NewCallExpr creates a new CallExpr out of the given sub-expressions. Will
@@ -363,6 +413,11 @@ func (ce *CallExpr) CodeStr() string {
 	return sb.String()
 }
 
+// SourcePos is the location in source this expression came from.
+func (ce *CallExpr) SourcePos() ScannerPosition {
+	return ce.Pos
+}
+
 // NewIfExpr builds a new if statement with the given condition and cases. The
 // cases may be left nil.
 func NewIfExpr(cond Expr, case1, case2 Expr) *IfExpr {
@@ -412,6 +467,11 @@ func (ie *IfExpr) CodeStr() string {
 // InspectStr returns a user-readable representation of the if expression.
 func (ie *IfExpr) InspectStr() string {
 	return fmt.Sprintf("(todo)")
+}
+
+// SourcePos is the location in source this expression came from.
+func (ie *IfExpr) SourcePos() ScannerPosition {
+	return ie.Pos
 }
 
 // NewFnExpr builds a new function expression with the given arguments and body.
@@ -500,6 +560,11 @@ func (fe *FnExpr) InspectStr() string {
 	return sb.String()
 }
 
+// SourcePos is the location in source this expression came from.
+func (fe *FnExpr) SourcePos() ScannerPosition {
+	return fe.Pos
+}
+
 // Eval will assign the underlying value to the ident on the context, and return
 // the value.
 func (le *LetExpr) Eval(ec *EvalContext) (Value, error) {
@@ -520,4 +585,9 @@ func (le *LetExpr) CodeStr() string {
 // InspectStr returns a user-readable representation of the let expression.
 func (le *LetExpr) InspectStr() string {
 	return fmt.Sprintf("<assign \"%s\">", le.Ident.Val)
+}
+
+// SourcePos is the location in source this expression came from.
+func (le *LetExpr) SourcePos() ScannerPosition {
+	return le.Pos
 }
