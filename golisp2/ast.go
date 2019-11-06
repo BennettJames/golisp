@@ -311,6 +311,7 @@ func (fv *FuncValue) Eval(ec *EvalContext) (Value, error) {
 
 // Exec executes the underlying function with the given context and arguments.
 func (fv *FuncValue) Exec(ec *EvalContext, exprs ...Expr) (Value, error) {
+	// ques (bs): will this need augmentation?
 	return fv.Fn(ec, exprs...)
 }
 
@@ -372,23 +373,34 @@ func NewCallExpr(exprs ...Expr) *CallExpr {
 // Eval will evaluate the expression and return its results.
 func (ce *CallExpr) Eval(ec *EvalContext) (Value, error) {
 	if len(ce.Exprs) == 0 {
+		// note (bs): this among other things exposes a bit of a flaw in my position
+		// system - it doesn't quite make sense for values like this. Values are
+		// pure and can be dynamic; hard-
+		//
+		// Perhaps what I am trying to capture with many of my "values" here is
+		// *literals*, which do have location information. I'd strongly consider
+		// differentiating those; I think that equivocation is part of why the
+		// "value" interface as it exists feels wrong. Values are not expressions
+		// per se (though in lisp proper that's of course a fuzzy distinction).
 		return NewNilValue(), nil
 	}
 
 	v1, v1Err := ce.Exprs[0].Eval(ec)
 	if v1Err != nil {
+		// todo (bs): wrap with position information from ce.Pos
 		return nil, v1Err
 	}
 	asFn, isFn := v1.(*FuncValue)
 	if !isFn {
-		if len(ce.Exprs) == 1 {
-			return v1, nil
-		}
-		// todo (bs): improve this error
+		// todo (bs): again, this can be augmented.
 		return nil, fmt.Errorf("A call with more than 1 value must start with a function")
 	}
 
-	return asFn.Exec(ec, ce.Exprs[1:]...)
+	// ques (bs): does this also need to be augmented? It's possible it doesn't;
+	// depends on the mechanisms of the fn. Baseline expectation is that it should
+	// though.
+	callVal, callVallErr := asFn.Exec(ec, ce.Exprs[1:]...)
+	return callVal, callVallErr
 }
 
 // InspectStr returns a user-readable representation of the call expression.
@@ -443,6 +455,7 @@ func (ie *IfExpr) Eval(ec *EvalContext) (Value, error) {
 	}
 	asBool, isBool := condV.(*BoolValue)
 	if !isBool {
+		// todo (bs): add pos information
 		return nil, fmt.Errorf("if must be given a boolean condition in the first argument")
 	}
 	if asBool.Val {
@@ -486,9 +499,9 @@ func NewFnExpr(args []Arg, body []Expr) *FnExpr {
 // execute the function; it must be evaluated within a call to be actually
 // executed.
 func (fe *FnExpr) Eval(parentEc *EvalContext) (Value, error) {
-	// fixme (bs): I don't think this should be returning a func value per se.
-	// This is a good case where perhaps having some plain functions in place of
-	// the strict AST would make sense; but I'm not sure yet.
+	// note (bs): I don't think this should be returning a func value per se. This
+	// is a good case where perhaps having some plain functions in place of the
+	// strict AST would make sense; but I'm not sure yet.
 
 	return NewFuncValue("", func(
 		callEc *EvalContext,
@@ -496,6 +509,7 @@ func (fe *FnExpr) Eval(parentEc *EvalContext) (Value, error) {
 	) (Value, error) {
 
 		if len(fe.Args) != len(callExprs) {
+			// todo (bs): add pos information
 			return nil, fmt.Errorf("expected %d arguments in call; got %d",
 				len(fe.Args), len(callExprs))
 		}
@@ -503,6 +517,7 @@ func (fe *FnExpr) Eval(parentEc *EvalContext) (Value, error) {
 		for i, arg := range fe.Args {
 			v, err := callExprs[i].Eval(callEc)
 			if err != nil {
+				// todo (bs): add pos information
 				return nil, err
 			}
 			evalEc.Add(arg.Ident, v)
@@ -512,6 +527,7 @@ func (fe *FnExpr) Eval(parentEc *EvalContext) (Value, error) {
 		for _, e := range fe.Body {
 			v, err := e.Eval(evalEc)
 			if err != nil {
+				// todo (bs): add pos information
 				return nil, err
 			}
 			evalV = v
@@ -571,6 +587,7 @@ func (le *LetExpr) Eval(ec *EvalContext) (Value, error) {
 	identStr := le.Ident.Val
 	v, err := le.Value.Eval(ec)
 	if err != nil {
+		// todo (bs): maybe add pos information
 		return nil, err
 	}
 	ec.Add(identStr, v)

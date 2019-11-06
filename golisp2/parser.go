@@ -166,6 +166,7 @@ func parseIdentValue(token ScannedToken) (Value, error) {
 	case "false":
 		return &BoolValue{
 			Val: false,
+			Pos: token.Pos,
 		}, nil
 	default:
 		return &IdentValue{
@@ -183,7 +184,7 @@ func parseNumberValue(token ScannedToken) (*NumberValue, error) {
 	f, e := strconv.ParseFloat(token.Value, 64)
 	if e != nil {
 		return nil, NewParseError(
-			fmt.Sprintf("could not parse number (%s) - %s", token.Value, e),
+			fmt.Sprintf("could not parse number [err=%s]", e),
 			token,
 		)
 	}

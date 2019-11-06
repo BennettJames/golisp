@@ -16,6 +16,13 @@ type (
 		r   rune
 		pos ScannerPosition
 	}
+
+	// TypeError is a runtime error when the incorrect type is passed to a
+	// function.
+	TypeError struct {
+		actual, expected string
+		pos              ScannerPosition
+	}
 )
 
 // NewParseError creates a new parse error with the given message and token.
@@ -61,4 +68,21 @@ func (pe ForbiddenRuneError) Error() string {
 	return fmt.Sprintf(
 		"Forbidden rune '%x' found in scan of '%s' (line %d, col %d)",
 		pe.r, pe.pos.SourceFile, pe.pos.Row, pe.pos.Col)
+}
+
+// NewTypeError creates a new type error with the actual and expected types at
+// the given location in source.
+func NewTypeError(actual, expected string, pos ScannerPosition) *TypeError {
+	return &TypeError{
+		actual:   actual,
+		expected: expected,
+		pos:      pos,
+	}
+}
+
+func (te TypeError) Error() string {
+	return fmt.Sprintf(
+		"Type error: expected '%s', got '%s' (%s:%d)",
+		te.expected, te.actual,
+		te.pos.SourceFile, te.pos.Row)
 }
