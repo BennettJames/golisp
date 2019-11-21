@@ -127,11 +127,13 @@ func tryParseCallTail(ts *TokenScanner) (Expr, error) {
 }
 
 // parseStringValue converts the string token to a string value.
-func parseStringValue(token ScannedToken) (*StringValue, error) {
+func parseStringValue(token ScannedToken) (*StringLiteral, error) {
 	v := token.Value
 	if len(v) == 0 {
-		return &StringValue{
-			Val: "",
+		return &StringLiteral{
+			Val: StringValue{
+				Val: "",
+			},
 			Pos: token.Pos,
 		}, nil
 	}
@@ -142,34 +144,40 @@ func parseStringValue(token ScannedToken) (*StringValue, error) {
 	if len(v) > 1 && v[len(v)-1] == '"' {
 		tailI = len(v) - 1
 	}
-	return &StringValue{
-		Val: v[leadI:tailI],
+	return &StringLiteral{
+		Val: StringValue{
+			Val: v[leadI:tailI],
+		},
 		Pos: token.Pos,
 	}, nil
 }
 
 // parseIdentValue converts the ident token to an ident value.
-func parseIdentValue(token ScannedToken) (Value, error) {
+func parseIdentValue(token ScannedToken) (Expr, error) {
 	// todo (bs): this should search for certain reserved words, and reject them.
 	// e.g. any of the "structural builtins" like if, defun, let, etc.
 
 	switch token.Value {
 	case "nil":
-		return &NilValue{
+		return &NilLiteral{
 			Pos: token.Pos,
 		}, nil
 	case "true":
-		return &BoolValue{
-			Val: true,
+		return &BoolLiteral{
+			Val: BoolValue{
+				Val: true,
+			},
 			Pos: token.Pos,
 		}, nil
 	case "false":
-		return &BoolValue{
-			Val: false,
+		return &BoolLiteral{
+			Val: BoolValue{
+				Val: false,
+			},
 			Pos: token.Pos,
 		}, nil
 	default:
-		return &IdentValue{
+		return &IdentLiteral{
 			Val: token.Value,
 			Pos: token.Pos,
 		}, nil
@@ -177,7 +185,7 @@ func parseIdentValue(token ScannedToken) (Value, error) {
 }
 
 // parseNumberValue converts the number token to a number value.
-func parseNumberValue(token ScannedToken) (*NumberValue, error) {
+func parseNumberValue(token ScannedToken) (*NumberLiteral, error) {
 	// todo (bs): given that this is, you know, a *parser*, it's awfully clumsy to
 	// outsource the final number parsing to Go. The manual parse should be able
 	// to correctly map this to a number.
@@ -188,17 +196,19 @@ func parseNumberValue(token ScannedToken) (*NumberValue, error) {
 			token,
 		)
 	}
-	return &NumberValue{
-		Val: f,
+	return &NumberLiteral{
+		Val: NumberValue{
+			Val: f,
+		},
 		Pos: token.Pos,
 	}, nil
 }
 
 // parseOpValue converts the operator token to a function value. If the operator
 // isn't supported, an error is returned.
-func parseOpValue(token ScannedToken) (*FuncValue, error) {
+func parseOpValue(token ScannedToken) (*FuncLiteral, error) {
 	// note (bs): this should probably exist as a discrete value
-	opMap := map[string]func(*EvalContext, ...Expr) (Value, error){
+	opMap := map[string]func(*EvalContext, ...Value) (Value, error){
 		"+":  addFn,
 		"-":  subFn,
 		"*":  multFn,
@@ -210,10 +220,12 @@ func parseOpValue(token ScannedToken) (*FuncValue, error) {
 		">=": gteNumFn,
 	}
 	if fn, ok := opMap[token.Value]; ok {
-		return &FuncValue{
+		return &FuncLiteral{
 			Name: token.Value,
-			Fn:   fn,
-			Pos:  token.Pos,
+			Fn: FuncValue{
+				Fn: fn,
+			},
+			Pos: token.Pos,
 		}, nil
 	}
 	return nil, NewParseError("unrecognized operator", token)
@@ -345,7 +357,7 @@ func tryParseLetTail(ts *TokenScanner) (Expr, error) {
 			fmt.Sprintf("let expects 2 arguments, got %d",
 				len(letExprs)), startToken)
 	}
-	asIdent, isIdent := letExprs[0].(*IdentValue)
+	asIdent, isIdent := letExprs[0].(*IdentLiteral)
 	if !isIdent {
 		return nil, NewParseError(
 			"let expects an ident as first argument", startToken)
@@ -395,7 +407,7 @@ func expectCallClose(ts *TokenScanner) error {
 // wrapNilExpr will return a nil expr if e is nil.
 func wrapNilExpr(e Expr) Expr {
 	if e == nil {
-		return NewNilValue()
+		return NewNilLiteral()
 	}
 	return e
 }
