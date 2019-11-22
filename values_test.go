@@ -33,6 +33,32 @@ func Test_listValue(t *testing.T) {
 		)
 	})
 
+	t.Run("get", func(t *testing.T) {
+		t.Run("basic", func(t *testing.T) {
+			assertNumValue(
+				t,
+				evalStrToVal(t, `(listGet (list 1 2 3) 1)`),
+				2,
+			)
+		})
+
+		t.Run("indexOutOfBounds", func(t *testing.T) {
+			evalStrToErr(t, `(listGet (list 1 2 3) 4)`)
+		})
+
+		t.Run("badArgCount", func(t *testing.T) {
+			evalStrToErr(t, `(listGet (list 1 2 3))`)
+		})
+
+		t.Run("badListArg", func(t *testing.T) {
+			evalStrToErr(t, `(listGet (map "a" 1) 2)`)
+		})
+
+		t.Run("badIndexArg", func(t *testing.T) {
+			evalStrToErr(t, `(listGet (list 1 2 3) "")`)
+		})
+	})
+
 	t.Run("inspect", func(t *testing.T) {
 		require.Equal(
 			t,
@@ -155,6 +181,35 @@ func Test_mapValue(t *testing.T) {
 				"b": &NumberValue{Val: 2},
 			},
 		)
+	})
+
+	t.Run("get", func(t *testing.T) {
+		t.Run("basic", func(t *testing.T) {
+			assertNumValue(
+				t,
+				evalStrToVal(t, `(mapGet (map "a" 1 "b" 2) "a")`),
+				1,
+			)
+		})
+
+		t.Run("missingVal", func(t *testing.T) {
+			assertNilValue(
+				t,
+				evalStrToVal(t, `(mapGet (map "a" 1 "b" 2) "c")`),
+			)
+		})
+
+		t.Run("badArgCount", func(t *testing.T) {
+			evalStrToErr(t, `(mapGet (map "a" 1 "b" 2))`)
+		})
+
+		t.Run("badMapArg", func(t *testing.T) {
+			evalStrToErr(t, `(mapGet (list 1 2) "c")`)
+		})
+
+		t.Run("badKeyArg", func(t *testing.T) {
+			evalStrToErr(t, `(mapGet (map "a" 1 "b" 2) nil)`)
+		})
 	})
 
 	t.Run("badCreate", func(t *testing.T) {

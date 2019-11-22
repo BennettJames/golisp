@@ -2,6 +2,7 @@ package golisp2
 
 import (
 	"fmt"
+	"math"
 	"strings"
 )
 
@@ -19,12 +20,14 @@ func BuiltinContext() *EvalContext {
 
 		"strEq": &FuncValue{Fn: strEqFn},
 
-		"list":       &FuncValue{Fn: makeListFn},
+		"list":       &FuncValue{Fn: listCreateFn},
+		"listGet":    &FuncValue{Fn: listGetFn},
 		"listFilter": &FuncValue{Fn: listFilterFn},
 		"listMap":    &FuncValue{Fn: listMapFn},
 		"listReduce": &FuncValue{Fn: listReduceFn},
 
-		"map":       &FuncValue{Fn: makeMapFn},
+		"map":       &FuncValue{Fn: mapCreateFn},
+		"mapGet":    &FuncValue{Fn: mapGetFn},
 		"mapFilter": &FuncValue{Fn: mapFilterFn},
 		"mapMap":    &FuncValue{Fn: mapMapFn},
 		"mapReduce": &FuncValue{Fn: mapReduceFn},
@@ -330,11 +333,33 @@ func lteNumFn(ec *EvalContext, vals ...Value) (Value, error) {
 // List functions
 //
 
-// makeListFn creates a new list out of the given arguments.
-func makeListFn(ec *EvalContext, vals ...Value) (Value, error) {
+// listCreateFn creates a new list out of the given arguments.
+func listCreateFn(ec *EvalContext, vals ...Value) (Value, error) {
 	return &ListValue{
 		Vals: vals,
 	}, nil
+}
+
+// listGetFn gets and returns the given index from the list. If it doesn't exit;
+// returns zero.
+func listGetFn(ec *EvalContext, vals ...Value) (Value, error) {
+	if len(vals) != 2 {
+		return nil, fmt.Errorf("listGet expects 2 arguments; got %d", len(vals))
+	}
+	asList, isList := vals[0].(*ListValue)
+	if !isList {
+		return nil, fmt.Errorf("listGet expects a map as the first argument")
+	}
+	asNum, isNum := vals[1].(*NumberValue)
+	if !isNum {
+		return nil, fmt.Errorf("listGet expects a number as the second argument")
+	}
+
+	index := int(math.Floor(asNum.Val))
+	if index < 0 || index >= len(asList.Vals) {
+		return nil, fmt.Errorf("listGet out of bounds")
+	}
+	return asList.Vals[index], nil
 }
 
 // listFilterFn expects a list and a function argument. The function will take an
@@ -447,8 +472,8 @@ func listReduceFn(ec *EvalContext, vals ...Value) (Value, error) {
 // Map functions
 //
 
-// makeMapFn creates a new map out of the given arguments.
-func makeMapFn(ec *EvalContext, vals ...Value) (Value, error) {
+// mapCreateFn creates a new map out of the given arguments.
+func mapCreateFn(ec *EvalContext, vals ...Value) (Value, error) {
 	if len(vals)%2 != 0 {
 		return nil, fmt.Errorf("map expects even number of arguments; got %d", len(vals))
 	}
@@ -466,6 +491,27 @@ func makeMapFn(ec *EvalContext, vals ...Value) (Value, error) {
 	return &MapValue{
 		Vals: mapVals,
 	}, nil
+}
+
+// mapGetFn gets and returns the given key from the map. If it doesn't exist;
+// returns nil.
+func mapGetFn(ec *EvalContext, vals ...Value) (Value, error) {
+	if len(vals) != 2 {
+		return nil, fmt.Errorf("mapGet expects 2 arguments; got %d", len(vals))
+	}
+	asMap, isMap := vals[0].(*MapValue)
+	if !isMap {
+		return nil, fmt.Errorf("mapGet expects a map as the first argument")
+	}
+	asStr, isStr := vals[1].(*StringValue)
+	if !isStr {
+		return nil, fmt.Errorf("mapGet expects a string as the second argument")
+	}
+	val, hasVal := asMap.Vals[asStr.Val]
+	if !hasVal {
+		return &NilValue{}, nil
+	}
+	return val, nil
 }
 
 // mapFilterFn expects a map and a function argument. The function will take a
