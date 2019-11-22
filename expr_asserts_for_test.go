@@ -125,3 +125,19 @@ func assertCellValue(t *testing.T, v Value, expectedL, expectedR Value) {
 	require.EqualValues(t, expectedL, asCell.Left, "left values should be equal")
 	require.EqualValues(t, expectedR, asCell.Right, "right values should be equal")
 }
+
+func assertAsList(t *testing.T, v Value) *ListValue {
+	t.Helper()
+	require.NotNil(t, v)
+	asList, isList := v.(*ListValue)
+	require.True(t, isList)
+	return asList
+}
+
+func assertListValue(t *testing.T, actual Value, expected []Value) {
+	t.Helper()
+	asList := assertAsList(t, actual)
+	// note (bs): not sure if require is smart enough for this; may need to
+	// eventually add a more sensitive notion of collection equality.
+	require.EqualValues(t, expected, asList.Vals, "list values should be equal")
+}

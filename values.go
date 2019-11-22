@@ -1,6 +1,9 @@
 package golisp2
 
-import "fmt"
+import (
+	"fmt"
+	"strings"
+)
 
 type (
 	// CellValue is a representation of a pair of values within the interpreted
@@ -38,6 +41,11 @@ type (
 	FuncValue struct {
 		// Fn is the function body the function value references.
 		Fn func(*EvalContext, ...Value) (Value, error)
+	}
+
+	// ListValue represents a list of values.
+	ListValue struct {
+		Vals []Value
 	}
 )
 
@@ -93,4 +101,18 @@ func (fv *FuncValue) InspectStr() string {
 	// function itself. That will involve (optionally) retaining the declaration
 	// name of the function.
 	return fmt.Sprintf("<func>")
+}
+
+// InspectStr returns a human-readable string representation of the list.
+func (lv *ListValue) InspectStr() string {
+	var sb strings.Builder
+	sb.WriteString("[")
+	for i, v := range lv.Vals {
+		if i > 0 {
+			sb.WriteString(" ")
+		}
+		sb.WriteString(v.InspectStr())
+	}
+	sb.WriteString("]")
+	return sb.String()
 }

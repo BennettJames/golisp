@@ -16,6 +16,11 @@ func BuiltinContext() *EvalContext {
 		"and":    &FuncValue{Fn: andFn},
 		"or":     &FuncValue{Fn: orFn},
 		"not":    &FuncValue{Fn: notFn},
+
+		"list":   &FuncValue{Fn: listFn},
+		"filter": &FuncValue{Fn: filterListFn},
+		"map":    &FuncValue{Fn: mapListFn},
+		"reduce": &FuncValue{Fn: reduceListFn},
 	})
 }
 
@@ -296,4 +301,121 @@ func lteNumFn(ec *EvalContext, vals ...Value) (Value, error) {
 	return &BoolValue{
 		Val: v1AsNum.Val <= v2AsNum.Val,
 	}, nil
+}
+
+//
+// List functions
+//
+
+// listFn creates a new list out of the given arguments.
+func listFn(ec *EvalContext, vals ...Value) (Value, error) {
+	return &ListValue{
+		Vals: vals,
+	}, nil
+}
+
+// filterListFn expects a list and a function argument. The function will take an
+// element, and return either true or false. It will be called on each element
+// of the list, and all values that are marked true will be collected and
+// returned in a new list.
+func filterListFn(ec *EvalContext, vals ...Value) (Value, error) {
+	// todo (bs): let's play around with some of the arg-reader stuff you had
+	// played around with. To start; I would make it not use reflection (yet); and
+	// just use explicit named type reading arguments. That's mostly out of
+	// laziness: I don't want to think about reflection and it's pretty easy to
+	if len(vals) != 2 {
+		return nil, fmt.Errorf("filter expects 2 arguments; got %d", len(vals))
+	}
+	asList, isList := vals[0].(*ListValue)
+	if !isList {
+		return nil, fmt.Errorf("filter expects a list as the first argument")
+	}
+	asFn, isFn := vals[1].(*FuncValue)
+	if !isFn {
+		return nil, fmt.Errorf("filter expects a function as the second argument")
+	}
+
+	filteredVals := []Value{}
+	for _, v := range asList.Vals {
+		// todo (bs): double check that this couldn't contaminate the scope
+		filterVal, filterErr := asFn.Fn(ec, v)
+		if filterErr != nil {
+			return nil, fmt.Errorf("filter encountered an error: %w", filterErr)
+		}
+		switch tV := filterVal.(type) {
+		case *NilValue:
+			continue
+		case *BoolValue:
+			if tV.Val {
+				filteredVals = append(filteredVals, v)
+			}
+		default:
+			return nil, fmt.Errorf("filter fn must return boolean")
+		}
+	}
+
+	return &ListValue{
+		Vals: filteredVals,
+	}, nil
+}
+
+// mapListFn expects a list and a function argument. The function will take an
+// element and return an element. It will be called on each element on the list;
+// and the returned values will be returned in a new list.
+func mapListFn(ec *EvalContext, vals ...Value) (Value, error) {
+	if len(vals) != 2 {
+		return nil, fmt.Errorf("map expects 2 arguments; got %d", len(vals))
+	}
+	asList, isList := vals[0].(*ListValue)
+	if !isList {
+		return nil, fmt.Errorf("map expects a list as the first argument")
+	}
+	asFn, isFn := vals[1].(*FuncValue)
+	if !isFn {
+		return nil, fmt.Errorf("map expects a function as the second argument")
+	}
+
+	mappedVals := []Value{}
+	for _, v := range asList.Vals {
+		mapVal, mapErr := asFn.Fn(ec, v)
+		if mapErr != nil {
+			return nil, fmt.Errorf("map encountered an error: %w", mapErr)
+		}
+		mappedVals = append(mappedVals, mapVal)
+	}
+
+	return &ListValue{
+		Vals: mappedVals,
+	}, nil
+}
+
+// reduceListFn expects a value, list, and a function argument. The value is the
+// "initial value" of the reduction. The function take two arguments; the
+// "reduced value" and an element from the list. It will be called with the
+// initial value, and iteratively called with the results of the past map and
+// the next element in the list.
+func reduceListFn(ec *EvalContext, vals ...Value) (Value, error) {
+	if len(vals) != 3 {
+		return nil, fmt.Errorf("map expects 3 arguments; got %d", len(vals))
+	}
+	initVal := vals[0]
+	asList, isList := vals[1].(*ListValue)
+	if !isList {
+		return nil, fmt.Errorf("map expects a list as the second argument")
+	}
+	asFn, isFn := vals[2].(*FuncValue)
+	if !isFn {
+		return nil, fmt.Errorf("map expects a function as the third argument")
+	}
+
+	reducedVal := initVal
+	for _, v := range asList.Vals {
+		innerRVal, err := asFn.Fn(ec, reducedVal, v)
+		if err != nil {
+			return nil, fmt.Errorf("map encountered an error: %w", err)
+		}
+		reducedVal = innerRVal
+	}
+
+	return reducedVal, nil
 }
