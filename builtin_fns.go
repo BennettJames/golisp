@@ -28,6 +28,8 @@ func BuiltinContext() *EvalContext {
 		"mapFilter": &FuncValue{Fn: mapFilterFn},
 		"mapMap":    &FuncValue{Fn: mapMapFn},
 		"mapReduce": &FuncValue{Fn: mapReduceFn},
+		"mapKeys":   &FuncValue{Fn: mapKeysFn},
+		"mapValues": &FuncValue{Fn: mapValuesFn},
 	})
 }
 
@@ -567,4 +569,44 @@ func mapReduceFn(ec *EvalContext, vals ...Value) (Value, error) {
 	}
 
 	return reducedVal, nil
+}
+
+// mapKeysFn takes a map and returns it's keys as a list.
+func mapKeysFn(ec *EvalContext, vals ...Value) (Value, error) {
+	if len(vals) != 1 {
+		return nil, fmt.Errorf("mapKeys expects 1 arguments; got %d", len(vals))
+	}
+	asMap, isMap := vals[0].(*MapValue)
+	if !isMap {
+		return nil, fmt.Errorf("mapKeys expects a map as the first argument")
+	}
+
+	keys := make([]Value, 0, len(asMap.Vals))
+	for k := range asMap.Vals {
+		keys = append(keys, &StringValue{Val: k})
+	}
+
+	return &ListValue{
+		Vals: keys,
+	}, nil
+}
+
+// mapValuesFn takes a map and returns it's values as a list.
+func mapValuesFn(ec *EvalContext, vals ...Value) (Value, error) {
+	if len(vals) != 1 {
+		return nil, fmt.Errorf("mapValues expects 1 arguments; got %d", len(vals))
+	}
+	asMap, isMap := vals[0].(*MapValue)
+	if !isMap {
+		return nil, fmt.Errorf("mapValues expects a map as the first argument")
+	}
+
+	values := make([]Value, 0, len(asMap.Vals))
+	for _, v := range asMap.Vals {
+		values = append(values, v)
+	}
+
+	return &ListValue{
+		Vals: values,
+	}, nil
 }

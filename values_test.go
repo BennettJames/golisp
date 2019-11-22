@@ -179,6 +179,48 @@ func Test_mapValue(t *testing.T) {
 		})
 	})
 
+	t.Run("mapKeys", func(t *testing.T) {
+		t.Run("basic", func(t *testing.T) {
+			require.ElementsMatch(
+				t,
+				[]Value{
+					&StringValue{Val: "a"},
+					&StringValue{Val: "b"},
+				},
+				assertAsList(t, evalStrToVal(t, `(mapKeys (map "a" 1 "b" 2))`)).Vals,
+			)
+		})
+
+		t.Run("badArg", func(t *testing.T) {
+			evalStrToErr(t, `(mapKeys (list 1 2 3))`)
+		})
+
+		t.Run("badArgCount", func(t *testing.T) {
+			evalStrToErr(t, `(mapKeys (map "a" 1 "b" 2) (map "a" 1 "b" 2))`)
+		})
+	})
+
+	t.Run("mapValues", func(t *testing.T) {
+		t.Run("basic", func(t *testing.T) {
+			require.ElementsMatch(
+				t,
+				[]Value{
+					&NumberValue{Val: 1},
+					&NumberValue{Val: 2},
+				},
+				assertAsList(t, evalStrToVal(t, `(mapValues (map "a" 1 "b" 2))`)).Vals,
+			)
+		})
+
+		t.Run("badArg", func(t *testing.T) {
+			evalStrToErr(t, `(mapValues (list 1 2 3))`)
+		})
+
+		t.Run("badArgCount", func(t *testing.T) {
+			evalStrToErr(t, `(mapValues (map "a" 1 "b" 2) (map "a" 1 "b" 2))`)
+		})
+	})
+
 	t.Run("filter", func(t *testing.T) {
 		t.Run("basic", func(t *testing.T) {
 			// let's make sure the key function is tested here as well
