@@ -7,17 +7,6 @@ import (
 
 type (
 
-	// Value represents any arbitrary value within the lisp interpreting
-	// environment. While it just extends "expr", the implicit contract is that no
-	// work is actually performed at eval time; it just returns itself.
-	//
-	// note (bs): not sure this is valuable; also not sure
-	Value interface {
-
-		// InspectStr returns a printable version of the expression.
-		InspectStr() string
-	}
-
 	// Expr is the fundamental unit of lisp - it represents anything that can be
 	// evaluated to a value.
 	Expr interface {

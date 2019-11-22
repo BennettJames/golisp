@@ -51,7 +51,7 @@ func Test_listValue(t *testing.T) {
 		t.Run("basic", func(t *testing.T) {
 			assertListValue(
 				t,
-				evalStrToVal(t, `(filter (list 1 2 3) (fn (v) (== v 2)))`),
+				evalStrToVal(t, `(listFilter (list 1 2 3) (fn (v) (== v 2)))`),
 				[]Value{
 					&NumberValue{2},
 				},
@@ -61,29 +61,29 @@ func Test_listValue(t *testing.T) {
 		t.Run("allowsNils", func(t *testing.T) {
 			assertListValue(
 				t,
-				evalStrToVal(t, `(filter (list 1 2 3) (fn (v) nil))`),
+				evalStrToVal(t, `(listFilter (list 1 2 3) (fn (v) nil))`),
 				[]Value{},
 			)
 		})
 
 		t.Run("badArgCount", func(t *testing.T) {
-			evalStrToErr(t, `(filter (list 1 2 3))`)
+			evalStrToErr(t, `(listFilter (list 1 2 3))`)
 		})
 
 		t.Run("badValue", func(t *testing.T) {
-			evalStrToErr(t, `(filter (list 1 nil 3) (fn (v) (== v 2)))`)
+			evalStrToErr(t, `(listFilter (list 1 nil 3) (fn (v) (== v 2)))`)
 		})
 
 		t.Run("badReturnValue", func(t *testing.T) {
-			evalStrToErr(t, `(filter (list 1 2 3) (fn (v) (+ v 1)))`)
+			evalStrToErr(t, `(listFilter (list 1 2 3) (fn (v) (+ v 1)))`)
 		})
 
 		t.Run("badList", func(t *testing.T) {
-			evalStrToErr(t, `(filter "" (fn (v) (== v 2)))`)
+			evalStrToErr(t, `(listFilter "" (fn (v) (== v 2)))`)
 		})
 
 		t.Run("badFn", func(t *testing.T) {
-			evalStrToErr(t, `(filter (list 1 2 3) "")`)
+			evalStrToErr(t, `(listFilter (list 1 2 3) "")`)
 		})
 	})
 
@@ -91,7 +91,7 @@ func Test_listValue(t *testing.T) {
 		t.Run("basic", func(t *testing.T) {
 			assertListValue(
 				t,
-				evalStrToVal(t, `(map (list 1 2 3) (fn (v) (+ v 1)))`),
+				evalStrToVal(t, `(listMap (list 1 2 3) (fn (v) (+ v 1)))`),
 				[]Value{
 					&NumberValue{2},
 					&NumberValue{3},
@@ -101,19 +101,19 @@ func Test_listValue(t *testing.T) {
 		})
 
 		t.Run("badArgCount", func(t *testing.T) {
-			evalStrToErr(t, `(map (list 1 2 3))`)
+			evalStrToErr(t, `(listMap (list 1 2 3))`)
 		})
 
 		t.Run("badValue", func(t *testing.T) {
-			evalStrToErr(t, `(map (list 1 nil 3) (fn (v) (+ v 1)))`)
+			evalStrToErr(t, `(listMap (list 1 nil 3) (fn (v) (+ v 1)))`)
 		})
 
 		t.Run("badList", func(t *testing.T) {
-			evalStrToErr(t, `(map "hello there" (fn (v) (+ v 1)))`)
+			evalStrToErr(t, `(listMap "hello there" (fn (v) (+ v 1)))`)
 		})
 
 		t.Run("badFn", func(t *testing.T) {
-			evalStrToErr(t, `(map (list 1 2 3) "hello there")`)
+			evalStrToErr(t, `(listMap (list 1 2 3) "hello there")`)
 		})
 	})
 
@@ -121,25 +121,166 @@ func Test_listValue(t *testing.T) {
 		t.Run("basic", func(t *testing.T) {
 			assertNumValue(
 				t,
-				evalStrToVal(t, `(reduce 1 (list 1 2 3) (fn (t v) (+ t v)))`),
+				evalStrToVal(t, `(listReduce 1 (list 1 2 3) (fn (t v) (+ t v)))`),
 				7.0,
 			)
 		})
 
 		t.Run("badArgCount", func(t *testing.T) {
-			evalStrToErr(t, `(reduce 1 (list 1 2 3))`)
+			evalStrToErr(t, `(listReduce 1 (list 1 2 3))`)
 		})
 
 		t.Run("badValue", func(t *testing.T) {
-			evalStrToErr(t, `(reduce 1 (list 1 nil 3) (fn (t v) (+ t v)))`)
+			evalStrToErr(t, `(listReduce 1 (list 1 nil 3) (fn (t v) (+ t v)))`)
 		})
 
 		t.Run("badList", func(t *testing.T) {
-			evalStrToErr(t, `(reduce 1 "hello there" (fn (t v) (+ t v)))`)
+			evalStrToErr(t, `(listReduce 1 "hello there" (fn (t v) (+ t v)))`)
 		})
 
 		t.Run("badFn", func(t *testing.T) {
-			evalStrToErr(t, `(reduce 1 (list 1 2 3) "hello there")`)
+			evalStrToErr(t, `(listReduce 1 (list 1 2 3) "hello there")`)
+		})
+	})
+}
+
+func Test_mapValue(t *testing.T) {
+
+	t.Run("create", func(t *testing.T) {
+		assertMapValue(
+			t,
+			evalStrToVal(t, `(map "a" 1 "b" 2)`),
+			map[string]Value{
+				"a": &NumberValue{Val: 1},
+				"b": &NumberValue{Val: 2},
+			},
+		)
+	})
+
+	t.Run("badCreate", func(t *testing.T) {
+		evalStrToErr(t, `(map "a" 1 "b")`)
+	})
+
+	t.Run("badKey", func(t *testing.T) {
+		evalStrToErr(t, `(map "a" 1 "b" 2 (list 1 2 3) 3)`)
+	})
+
+	t.Run("inspectStr", func(t *testing.T) {
+		t.Run("stringKey", func(t *testing.T) {
+			require.Equal(
+				t,
+				`{ a:true }`,
+				(&MapValue{
+					Vals: map[string]Value{
+						"a": &BoolValue{Val: true},
+					},
+				}).InspectStr(),
+			)
+		})
+	})
+
+	t.Run("filter", func(t *testing.T) {
+		t.Run("basic", func(t *testing.T) {
+			// let's make sure the key function is tested here as well
+			assertMapValue(
+				t,
+				evalStrToVal(t, `(mapFilter
+					(map "a" 1 "b" 2 "c" 2)
+					(fn (k v) (and (strEq k "b") (== v 2))
+				  )
+				)`),
+				map[string]Value{
+					"b": &NumberValue{Val: 2},
+				},
+			)
+		})
+
+		t.Run("allowsNils", func(t *testing.T) {
+			assertMapValue(
+				t,
+				evalStrToVal(t, `(mapFilter (map "a" 1 "b" 2) (fn (k v) nil))`),
+				map[string]Value{},
+			)
+		})
+
+		t.Run("badArgCount", func(t *testing.T) {
+			evalStrToErr(t, `(mapFilter (map "a" 1 "b" 2))`)
+		})
+
+		t.Run("badValue", func(t *testing.T) {
+			evalStrToErr(t, `(mapFilter (map "a" 1 "b" nil) (fn (k v) (== v 2)))`)
+		})
+
+		t.Run("badReturnValue", func(t *testing.T) {
+			evalStrToErr(t, `(mapFilter (map "a" 1 "b" 2) (fn (k v) (+ v 1)))`)
+		})
+
+		t.Run("badMapArg", func(t *testing.T) {
+			evalStrToErr(t, `(mapFilter "" (fn (k v) (== v 2)))`)
+		})
+
+		t.Run("badFnArg", func(t *testing.T) {
+			evalStrToErr(t, `(mapFilter (map "a" 1 "b" 2) "")`)
+		})
+	})
+
+	t.Run("map", func(t *testing.T) {
+		t.Run("basic", func(t *testing.T) {
+			assertMapValue(
+				t,
+				evalStrToVal(t, `(mapMap
+					(map "a" 1 "b" 2 "c" 2)
+					(fn (k v) (if (strEq k "c") (+ v 2) (+ v 1))))`),
+				map[string]Value{
+					"a": &NumberValue{Val: 2},
+					"b": &NumberValue{Val: 3},
+					"c": &NumberValue{Val: 4},
+				},
+			)
+		})
+
+		t.Run("badArgCount", func(t *testing.T) {
+			evalStrToErr(t, `(mapMap (map "a" 1 "b" 2))`)
+		})
+
+		t.Run("badValue", func(t *testing.T) {
+			evalStrToErr(t, `(mapMap (map "a" 1 "b" nil) (fn (k v) (+ v 2)))`)
+		})
+
+		t.Run("badMapArg", func(t *testing.T) {
+			evalStrToErr(t, `(mapMap "" (fn (k v) (== v 2)))`)
+		})
+
+		t.Run("badFnArg", func(t *testing.T) {
+			evalStrToErr(t, `(mapMap (map "a" 1 "b" 2) "")`)
+		})
+	})
+
+	t.Run("map", func(t *testing.T) {
+		t.Run("basic", func(t *testing.T) {
+			assertNumValue(
+				t,
+				evalStrToVal(t, `(mapReduce 0
+					(map "a" 1 "b" 2 "c" 2)
+					(fn (t k v) (if (strEq k "c") (+ t (* v 2)) (+ t v ))))`),
+				7,
+			)
+		})
+
+		t.Run("badArgCount", func(t *testing.T) {
+			evalStrToErr(t, `(mapReduce 0 (map "a" 1 "b" 2))`)
+		})
+
+		t.Run("badValue", func(t *testing.T) {
+			evalStrToErr(t, `(mapReduce 0 (map "a" 1 "b" nil) (fn (t k v) (+ t v)))`)
+		})
+
+		t.Run("badMapArg", func(t *testing.T) {
+			evalStrToErr(t, `(mapReduce 0 "" (fn (t k v) (+ t v)))`)
+		})
+
+		t.Run("badFnArg", func(t *testing.T) {
+			evalStrToErr(t, `(mapReduce 0 (map "a" 1 "b" 2) "")`)
 		})
 	})
 }

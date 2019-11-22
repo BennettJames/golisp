@@ -6,6 +6,17 @@ import (
 )
 
 type (
+	// Value represents any arbitrary value within the lisp interpreting
+	// environment. While it just extends "expr", the implicit contract is that no
+	// work is actually performed at eval time; it just returns itself.
+	//
+	// note (bs): not sure this is valuable; also not sure
+	Value interface {
+
+		// InspectStr returns a printable version of the expression.
+		InspectStr() string
+	}
+
 	// CellValue is a representation of a pair of values within the interpreted
 	// environment. This can be composed to represent lists with standard car/cdr
 	// operators.
@@ -46,6 +57,11 @@ type (
 	// ListValue represents a list of values.
 	ListValue struct {
 		Vals []Value
+	}
+
+	// MapValue represents a map of values to values.
+	MapValue struct {
+		Vals map[string]Value
 	}
 )
 
@@ -114,5 +130,19 @@ func (lv *ListValue) InspectStr() string {
 		sb.WriteString(v.InspectStr())
 	}
 	sb.WriteString("]")
+	return sb.String()
+}
+
+// InspectStr returns a human-readable map representation of the list.
+func (mv *MapValue) InspectStr() string {
+	var sb strings.Builder
+	sb.WriteString("{")
+	for k, v := range mv.Vals {
+		sb.WriteString(" ")
+		sb.WriteString(k)
+		sb.WriteString(":")
+		sb.WriteString(v.InspectStr())
+	}
+	sb.WriteString(" }")
 	return sb.String()
 }

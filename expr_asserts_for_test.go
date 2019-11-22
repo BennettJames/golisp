@@ -141,3 +141,19 @@ func assertListValue(t *testing.T, actual Value, expected []Value) {
 	// eventually add a more sensitive notion of collection equality.
 	require.EqualValues(t, expected, asList.Vals, "list values should be equal")
 }
+
+func assertAsMap(t *testing.T, v Value) *MapValue {
+	t.Helper()
+	require.NotNil(t, v)
+	asMap, isMap := v.(*MapValue)
+	require.True(t, isMap)
+	return asMap
+}
+
+func assertMapValue(t *testing.T, actual Value, expected map[string]Value) {
+	t.Helper()
+	asMap := assertAsMap(t, actual)
+	// note (bs): not sure if require is smart enough for this; may need to
+	// eventually add a more sensitive notion of collection equality.
+	require.EqualValues(t, expected, asMap.Vals, "map values should be equal")
+}
