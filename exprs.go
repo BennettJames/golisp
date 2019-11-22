@@ -21,8 +21,6 @@ type (
 	// Expr is the fundamental unit of lisp - it represents anything that can be
 	// evaluated to a value.
 	Expr interface {
-		Value
-
 		// Eval will evaluate the underlying expression, and return the value (if
 		// any) that was calculated and returned.
 		Eval(*EvalContext) (Value, error)
@@ -83,16 +81,7 @@ func NewCallExpr(exprs ...Expr) *CallExpr {
 // Eval will evaluate the expression and return its results.
 func (ce *CallExpr) Eval(ec *EvalContext) (Value, error) {
 	if len(ce.Exprs) == 0 {
-		// note (bs): this among other things exposes a bit of a flaw in my position
-		// system - it doesn't quite make sense for values like this. Values are
-		// pure and can be dynamic; hard-
-		//
-		// Perhaps what I am trying to capture with many of my "values" here is
-		// *literals*, which do have location information. I'd strongly consider
-		// differentiating those; I think that equivocation is part of why the
-		// "value" interface as it exists feels wrong. Values are not expressions
-		// per se (though in lisp proper that's of course a fuzzy distinction).
-		return NewNilLiteral(), nil
+		return &NilValue{}, nil
 	}
 
 	v1, v1Err := ce.Exprs[0].Eval(ec)
@@ -102,12 +91,7 @@ func (ce *CallExpr) Eval(ec *EvalContext) (Value, error) {
 	}
 	asFn, isFn := v1.(*FuncValue)
 	if !isFn {
-		asFnL, isFnL := v1.(*FuncLiteral)
-		if !isFnL {
-			// todo (bs): again, this can be augmented.
-			return nil, fmt.Errorf("A call with more than 1 value must start with a function")
-		}
-		asFn = &asFnL.Fn
+		return nil, fmt.Errorf("A call with more than 1 value must start with a function")
 	}
 
 	vals := []Value{}
@@ -121,14 +105,6 @@ func (ce *CallExpr) Eval(ec *EvalContext) (Value, error) {
 	}
 	callVal, callValErr := asFn.Fn(ec, vals...)
 	return callVal, callValErr
-}
-
-// InspectStr returns a user-readable representation of the call expression.
-func (ce *CallExpr) InspectStr() string {
-	if len(ce.Exprs) == 0 {
-		return "<call nil>"
-	}
-	return fmt.Sprintf("<call \"%s\">", ce.Exprs[0].InspectStr())
 }
 
 // CodeStr will return the code representation of the call expression.
@@ -197,11 +173,6 @@ func (ie *IfExpr) CodeStr() string {
 	return sb.String()
 }
 
-// InspectStr returns a user-readable representation of the if expression.
-func (ie *IfExpr) InspectStr() string {
-	return fmt.Sprintf("(todo)")
-}
-
 // SourcePos is the location in source this expression came from.
 func (ie *IfExpr) SourcePos() ScannerPosition {
 	return ie.Pos
@@ -245,7 +216,7 @@ func (fe *FnExpr) Eval(parentEc *EvalContext) (Value, error) {
 			evalV = v
 		}
 		if evalV == nil {
-			evalV = NewNilLiteral()
+			evalV = &NilValue{}
 		}
 		return evalV, nil
 	}
@@ -313,11 +284,6 @@ func (le *LetExpr) Eval(ec *EvalContext) (Value, error) {
 // CodeStr will return the code representation of the let expression.
 func (le *LetExpr) CodeStr() string {
 	return fmt.Sprintf("(let %s %s)", le.Ident.Val, le.Value.CodeStr())
-}
-
-// InspectStr returns a user-readable representation of the let expression.
-func (le *LetExpr) InspectStr() string {
-	return fmt.Sprintf("<assign \"%s\">", le.Ident.Val)
 }
 
 // SourcePos is the location in source this expression came from.

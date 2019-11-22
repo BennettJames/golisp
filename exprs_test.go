@@ -85,10 +85,6 @@ func Test_cell(t *testing.T) {
 }
 
 func Test_bool(t *testing.T) {
-	t.Run("boolInspectStr", func(t *testing.T) {
-		require.Equal(t, "true", NewBoolLiteral(true).InspectStr())
-		require.Equal(t, "false", NewBoolLiteral(false).InspectStr())
-	})
 
 	t.Run("and", func(t *testing.T) {
 		v1, e1 := NewCallExpr(
@@ -455,7 +451,7 @@ func Test_CodeStr(t *testing.T) {
 		)
 		reparsedExpr := printAndReparse(t, baseAST)
 		v := mustEval(t, reparsedExpr, BuiltinContext().SubContext(map[string]Value{
-			"add": NewFuncLiteral("add", addFn),
+			"add": &FuncValue{Fn: addFn},
 		}))
 		assertNumValue(t, v, 6)
 	})

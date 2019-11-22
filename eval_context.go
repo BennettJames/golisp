@@ -37,7 +37,7 @@ func (ec *EvalContext) Add(ident string, val Value) {
 // otherwise a nil value and "false".
 func (ec *EvalContext) Resolve(ident string) (Value, bool) {
 	if ec == nil {
-		return NewNilLiteral(), false
+		return &NilValue{}, false
 	}
 	if v, ok := ec.vals[ident]; ok {
 		return v, true

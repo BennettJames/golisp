@@ -131,9 +131,7 @@ func parseStringValue(token ScannedToken) (*StringLiteral, error) {
 	v := token.Value
 	if len(v) == 0 {
 		return &StringLiteral{
-			Val: StringValue{
-				Val: "",
-			},
+			Str: "",
 			Pos: token.Pos,
 		}, nil
 	}
@@ -145,9 +143,7 @@ func parseStringValue(token ScannedToken) (*StringLiteral, error) {
 		tailI = len(v) - 1
 	}
 	return &StringLiteral{
-		Val: StringValue{
-			Val: v[leadI:tailI],
-		},
+		Str: v[leadI:tailI],
 		Pos: token.Pos,
 	}, nil
 }
@@ -164,17 +160,13 @@ func parseIdentValue(token ScannedToken) (Expr, error) {
 		}, nil
 	case "true":
 		return &BoolLiteral{
-			Val: BoolValue{
-				Val: true,
-			},
-			Pos: token.Pos,
+			Bool: true,
+			Pos:  token.Pos,
 		}, nil
 	case "false":
 		return &BoolLiteral{
-			Val: BoolValue{
-				Val: false,
-			},
-			Pos: token.Pos,
+			Bool: false,
+			Pos:  token.Pos,
 		}, nil
 	default:
 		return &IdentLiteral{
@@ -197,9 +189,7 @@ func parseNumberValue(token ScannedToken) (*NumberLiteral, error) {
 		)
 	}
 	return &NumberLiteral{
-		Val: NumberValue{
-			Val: f,
-		},
+		Num: f,
 		Pos: token.Pos,
 	}, nil
 }
@@ -222,10 +212,8 @@ func parseOpValue(token ScannedToken) (*FuncLiteral, error) {
 	if fn, ok := opMap[token.Value]; ok {
 		return &FuncLiteral{
 			Name: token.Value,
-			Fn: FuncValue{
-				Fn: fn,
-			},
-			Pos: token.Pos,
+			Fn:   fn,
+			Pos:  token.Pos,
 		}, nil
 	}
 	return nil, NewParseError("unrecognized operator", token)

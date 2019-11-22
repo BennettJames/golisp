@@ -45,10 +45,10 @@ type (
 // 'nil'.
 func NewCellValue(left, right Value) *CellValue {
 	if left == nil {
-		left = NewNilLiteral()
+		left = &NilValue{}
 	}
 	if right == nil {
-		right = NewNilLiteral()
+		right = &NilValue{}
 	}
 	return &CellValue{
 		Left:  left,

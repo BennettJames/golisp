@@ -9,13 +9,13 @@ import (
 // functions. Note this just includes built-in plain functions; not operators.
 func BuiltinContext() *EvalContext {
 	return NewContext(map[string]Value{
-		"concat": NewFuncLiteral("concat", concatFn),
-		"cons":   NewFuncLiteral("cons", consFn),
-		"car":    NewFuncLiteral("car", carFn),
-		"cdr":    NewFuncLiteral("cdr", cdrFn),
-		"and":    NewFuncLiteral("and", andFn),
-		"or":     NewFuncLiteral("or", orFn),
-		"not":    NewFuncLiteral("not", notFn),
+		"concat": &FuncValue{Fn: concatFn},
+		"cons":   &FuncValue{Fn: consFn},
+		"car":    &FuncValue{Fn: carFn},
+		"cdr":    &FuncValue{Fn: cdrFn},
+		"and":    &FuncValue{Fn: andFn},
+		"or":     &FuncValue{Fn: orFn},
+		"not":    &FuncValue{Fn: notFn},
 	})
 }
 
