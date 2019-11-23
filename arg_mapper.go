@@ -60,6 +60,8 @@ func (am *ArgMapper) ReadString(v **StringValue) *ArgMapper {
 	switch tV := am.next().(type) {
 	case *StringValue:
 		*v = tV
+	default:
+		am.err = fmt.Errorf("ArgMapper: type error - expected string, got %T", tV)
 	}
 	return am
 }
@@ -70,6 +72,8 @@ func (am *ArgMapper) ReadBool(v **BoolValue) *ArgMapper {
 	switch tV := am.next().(type) {
 	case *BoolValue:
 		*v = tV
+	default:
+		am.err = fmt.Errorf("ArgMapper: type error - expected bool, got %T", tV)
 	}
 	return am
 }
@@ -80,6 +84,8 @@ func (am *ArgMapper) ReadFunc(v **FuncValue) *ArgMapper {
 	switch tV := am.next().(type) {
 	case *FuncValue:
 		*v = tV
+	default:
+		am.err = fmt.Errorf("ArgMapper: type error - expected func, got %T", tV)
 	}
 	return am
 }
@@ -90,6 +96,8 @@ func (am *ArgMapper) ReadNumber(v **NumberValue) *ArgMapper {
 	switch tV := am.next().(type) {
 	case *NumberValue:
 		*v = tV
+	default:
+		am.err = fmt.Errorf("ArgMapper: type error - expected number, got %T", tV)
 	}
 	return am
 }
@@ -100,6 +108,8 @@ func (am *ArgMapper) ReadCell(v **CellValue) *ArgMapper {
 	switch tV := am.next().(type) {
 	case *CellValue:
 		*v = tV
+	default:
+		am.err = fmt.Errorf("ArgMapper: type error - expected cell, got %T", tV)
 	}
 	return am
 }
@@ -110,6 +120,8 @@ func (am *ArgMapper) ReadList(v **ListValue) *ArgMapper {
 	switch tV := am.next().(type) {
 	case *ListValue:
 		*v = tV
+	default:
+		am.err = fmt.Errorf("ArgMapper: type error - expected list, got %T", tV)
 	}
 	return am
 }
@@ -120,6 +132,8 @@ func (am *ArgMapper) ReadMap(v **MapValue) *ArgMapper {
 	switch tV := am.next().(type) {
 	case *MapValue:
 		*v = tV
+	default:
+		am.err = fmt.Errorf("ArgMapper: type error - expected map, got %T", tV)
 	}
 	return am
 }
@@ -131,6 +145,17 @@ func (am *ArgMapper) ReadValue(v *Value) *ArgMapper {
 		*v = nextV
 	}
 	return am
+}
+
+// Complete will return any errors encountered during the mapping; and add a new
+// error if there are still unprocessed arguments remaining.
+func (am *ArgMapper) Complete() error {
+	remaining := am.maybeNext()
+	if remaining != nil {
+		am.err = fmt.Errorf(
+			"ArgMapper: unprocessed arguments remaining at end of mapping")
+	}
+	return am.err
 }
 
 // Err returns any encountered errors during the mapping.

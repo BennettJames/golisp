@@ -240,92 +240,72 @@ func divFn(c *EvalContext, vals ...Value) (Value, error) {
 //
 
 func eqNumFn(ec *EvalContext, vals ...Value) (Value, error) {
-	if len(vals) != 2 {
-		return nil, fmt.Errorf("eq expects 2 arguments; got %d", len(vals))
-	}
-	v1, v2 := vals[0], vals[1]
-	v1AsNum, v1IsNum := v1.(*NumberValue)
-	v2AsNum, v2IsNum := v2.(*NumberValue)
-	if !v1IsNum {
-		return nil, fmt.Errorf("eq expects number arguments")
-	}
-	if !v2IsNum {
-		return nil, fmt.Errorf("eq expects number arguments")
+	var v1, v2 *NumberValue
+	err := ArgMapperValues(vals...).
+		ReadNumber(&v1).
+		ReadNumber(&v2).
+		Complete()
+	if err != nil {
+		return nil, err
 	}
 	return &BoolValue{
-		Val: v1AsNum.Val == v2AsNum.Val,
+		Val: v1.Val == v2.Val,
 	}, nil
 }
 
 func gtNumFn(ec *EvalContext, vals ...Value) (Value, error) {
-	if len(vals) != 2 {
-		return nil, fmt.Errorf("gt expects 2 arguments; got %d", len(vals))
-	}
-	v1, v2 := vals[0], vals[1]
-	v1AsNum, v1IsNum := v1.(*NumberValue)
-	v2AsNum, v2IsNum := v2.(*NumberValue)
-	if !v1IsNum {
-		return nil, fmt.Errorf("gt expects number arguments")
-	}
-	if !v2IsNum {
-		return nil, fmt.Errorf("gt expects number arguments")
+	var v1, v2 *NumberValue
+	err := ArgMapperValues(vals...).
+		ReadNumber(&v1).
+		ReadNumber(&v2).
+		Complete()
+	if err != nil {
+		return nil, err
 	}
 	return &BoolValue{
-		Val: v1AsNum.Val > v2AsNum.Val,
+		Val: v1.Val > v2.Val,
 	}, nil
 }
 
 func ltNumFn(ec *EvalContext, vals ...Value) (Value, error) {
-	if len(vals) != 2 {
-		return nil, fmt.Errorf("lt expects 2 arguments; got %d", len(vals))
-	}
-	v1, v2 := vals[0], vals[1]
-	v1AsNum, v1IsNum := v1.(*NumberValue)
-	v2AsNum, v2IsNum := v2.(*NumberValue)
-	if !v1IsNum {
-		return nil, fmt.Errorf("lt expects number arguments")
-	}
-	if !v2IsNum {
-		return nil, fmt.Errorf("lt expects number arguments")
+	var v1, v2 *NumberValue
+	err := ArgMapperValues(vals...).
+		ReadNumber(&v1).
+		ReadNumber(&v2).
+		Complete()
+	if err != nil {
+		return nil, err
 	}
 	return &BoolValue{
-		Val: v1AsNum.Val < v2AsNum.Val,
+		Val: v1.Val < v2.Val,
 	}, nil
 }
 
 func gteNumFn(ec *EvalContext, vals ...Value) (Value, error) {
-	if len(vals) != 2 {
-		return nil, fmt.Errorf("gte expects 2 arguments; got %d", len(vals))
-	}
-	v1, v2 := vals[0], vals[1]
-	v1AsNum, v1IsNum := v1.(*NumberValue)
-	v2AsNum, v2IsNum := v2.(*NumberValue)
-	if !v1IsNum {
-		return nil, fmt.Errorf("gte expects number arguments")
-	}
-	if !v2IsNum {
-		return nil, fmt.Errorf("gte expects number arguments")
+	var v1, v2 *NumberValue
+	err := ArgMapperValues(vals...).
+		ReadNumber(&v1).
+		ReadNumber(&v2).
+		Complete()
+	if err != nil {
+		return nil, err
 	}
 	return &BoolValue{
-		Val: v1AsNum.Val >= v2AsNum.Val,
+		Val: v1.Val >= v2.Val,
 	}, nil
 }
 
 func lteNumFn(ec *EvalContext, vals ...Value) (Value, error) {
-	if len(vals) != 2 {
-		return nil, fmt.Errorf("lte expects 2 arguments; got %d", len(vals))
-	}
-	v1, v2 := vals[0], vals[1]
-	v1AsNum, v1IsNum := v1.(*NumberValue)
-	v2AsNum, v2IsNum := v2.(*NumberValue)
-	if !v1IsNum {
-		return nil, fmt.Errorf("lte expects number arguments")
-	}
-	if !v2IsNum {
-		return nil, fmt.Errorf("lte expects number arguments")
+	var v1, v2 *NumberValue
+	err := ArgMapperValues(vals...).
+		ReadNumber(&v1).
+		ReadNumber(&v2).
+		Complete()
+	if err != nil {
+		return nil, err
 	}
 	return &BoolValue{
-		Val: v1AsNum.Val <= v2AsNum.Val,
+		Val: v1.Val <= v2.Val,
 	}, nil
 }
 
@@ -343,16 +323,14 @@ func listCreateFn(ec *EvalContext, vals ...Value) (Value, error) {
 // listGetFn gets and returns the given index from the list. If it doesn't exit;
 // returns zero.
 func listGetFn(ec *EvalContext, vals ...Value) (Value, error) {
-	if len(vals) != 2 {
-		return nil, fmt.Errorf("listGet expects 2 arguments; got %d", len(vals))
-	}
-	asList, isList := vals[0].(*ListValue)
-	if !isList {
-		return nil, fmt.Errorf("listGet expects a map as the first argument")
-	}
-	asNum, isNum := vals[1].(*NumberValue)
-	if !isNum {
-		return nil, fmt.Errorf("listGet expects a number as the second argument")
+	var asList *ListValue
+	var asNum *NumberValue
+	err := ArgMapperValues(vals...).
+		ReadList(&asList).
+		ReadNumber(&asNum).
+		Complete()
+	if err != nil {
+		return nil, err
 	}
 
 	index := int(math.Floor(asNum.Val))
@@ -367,20 +345,14 @@ func listGetFn(ec *EvalContext, vals ...Value) (Value, error) {
 // of the list, and all values that are marked true will be collected and
 // returned in a new list.
 func listFilterFn(ec *EvalContext, vals ...Value) (Value, error) {
-	// todo (bs): let's play around with some of the arg-reader stuff you had
-	// played around with. To start; I would make it not use reflection (yet); and
-	// just use explicit named type reading arguments. That's mostly out of
-	// laziness: I don't want to think about reflection and it's pretty easy to
-	if len(vals) != 2 {
-		return nil, fmt.Errorf("listFilter expects 2 arguments; got %d", len(vals))
-	}
-	asList, isList := vals[0].(*ListValue)
-	if !isList {
-		return nil, fmt.Errorf("listFilter expects a list as the first argument")
-	}
-	asFn, isFn := vals[1].(*FuncValue)
-	if !isFn {
-		return nil, fmt.Errorf("listFilter expects a function as the second argument")
+	var asList *ListValue
+	var asFn *FuncValue
+	err := ArgMapperValues(vals...).
+		ReadList(&asList).
+		ReadFunc(&asFn).
+		Complete()
+	if err != nil {
+		return nil, err
 	}
 
 	filteredVals := []Value{}
@@ -411,16 +383,14 @@ func listFilterFn(ec *EvalContext, vals ...Value) (Value, error) {
 // element and return an element. It will be called on each element on the list;
 // and the returned values will be returned in a new list.
 func listMapFn(ec *EvalContext, vals ...Value) (Value, error) {
-	if len(vals) != 2 {
-		return nil, fmt.Errorf("listMap expects 2 arguments; got %d", len(vals))
-	}
-	asList, isList := vals[0].(*ListValue)
-	if !isList {
-		return nil, fmt.Errorf("listMap expects a list as the first argument")
-	}
-	asFn, isFn := vals[1].(*FuncValue)
-	if !isFn {
-		return nil, fmt.Errorf("listMap expects a function as the second argument")
+	var asList *ListValue
+	var asFn *FuncValue
+	err := ArgMapperValues(vals...).
+		ReadList(&asList).
+		ReadFunc(&asFn).
+		Complete()
+	if err != nil {
+		return nil, err
 	}
 
 	mappedVals := []Value{}
@@ -443,17 +413,16 @@ func listMapFn(ec *EvalContext, vals ...Value) (Value, error) {
 // initial value, and iteratively called with the results of the past map and
 // the next element in the list.
 func listReduceFn(ec *EvalContext, vals ...Value) (Value, error) {
-	if len(vals) != 3 {
-		return nil, fmt.Errorf("listReduce expects 3 arguments; got %d", len(vals))
-	}
-	initVal := vals[0]
-	asList, isList := vals[1].(*ListValue)
-	if !isList {
-		return nil, fmt.Errorf("listReduce expects a list as the second argument")
-	}
-	asFn, isFn := vals[2].(*FuncValue)
-	if !isFn {
-		return nil, fmt.Errorf("listReduce expects a function as the third argument")
+	var initVal Value
+	var asList *ListValue
+	var asFn *FuncValue
+	err := ArgMapperValues(vals...).
+		ReadValue(&initVal).
+		ReadList(&asList).
+		ReadFunc(&asFn).
+		Complete()
+	if err != nil {
+		return nil, err
 	}
 
 	reducedVal := initVal
@@ -496,17 +465,16 @@ func mapCreateFn(ec *EvalContext, vals ...Value) (Value, error) {
 // mapGetFn gets and returns the given key from the map. If it doesn't exist;
 // returns nil.
 func mapGetFn(ec *EvalContext, vals ...Value) (Value, error) {
-	if len(vals) != 2 {
-		return nil, fmt.Errorf("mapGet expects 2 arguments; got %d", len(vals))
+	var asMap *MapValue
+	var asStr *StringValue
+	err := ArgMapperValues(vals...).
+		ReadMap(&asMap).
+		ReadString(&asStr).
+		Complete()
+	if err != nil {
+		return nil, err
 	}
-	asMap, isMap := vals[0].(*MapValue)
-	if !isMap {
-		return nil, fmt.Errorf("mapGet expects a map as the first argument")
-	}
-	asStr, isStr := vals[1].(*StringValue)
-	if !isStr {
-		return nil, fmt.Errorf("mapGet expects a string as the second argument")
-	}
+
 	val, hasVal := asMap.Vals[asStr.Val]
 	if !hasVal {
 		return &NilValue{}, nil
@@ -519,18 +487,14 @@ func mapGetFn(ec *EvalContext, vals ...Value) (Value, error) {
 // element of the list, and all values that are marked true will be collected
 // and returned in a new list.
 func mapFilterFn(ec *EvalContext, vals ...Value) (Value, error) {
-	// fixme (bs): implement
-
-	if len(vals) != 2 {
-		return nil, fmt.Errorf("mapFilter expects 2 arguments; got %d", len(vals))
-	}
-	asMap, isMap := vals[0].(*MapValue)
-	if !isMap {
-		return nil, fmt.Errorf("mapFilter expects a map as the first argument")
-	}
-	asFn, isFn := vals[1].(*FuncValue)
-	if !isFn {
-		return nil, fmt.Errorf("mapFilter expects a function as the second argument")
+	var asMap *MapValue
+	var asFn *FuncValue
+	err := ArgMapperValues(vals...).
+		ReadMap(&asMap).
+		ReadFunc(&asFn).
+		Complete()
+	if err != nil {
+		return nil, err
 	}
 
 	filteredVals := map[string]Value{}
@@ -560,16 +524,14 @@ func mapFilterFn(ec *EvalContext, vals ...Value) (Value, error) {
 // key/value pair and return an updated value. It will be called on each element
 // on the map; and the returned values will be returned in a new map.
 func mapMapFn(ec *EvalContext, vals ...Value) (Value, error) {
-	if len(vals) != 2 {
-		return nil, fmt.Errorf("mapMap expects 2 arguments; got %d", len(vals))
-	}
-	asMap, isMap := vals[0].(*MapValue)
-	if !isMap {
-		return nil, fmt.Errorf("mapMap expects a map as the first argument")
-	}
-	asFn, isFn := vals[1].(*FuncValue)
-	if !isFn {
-		return nil, fmt.Errorf("mapMap expects a function as the second argument")
+	var asMap *MapValue
+	var asFn *FuncValue
+	err := ArgMapperValues(vals...).
+		ReadMap(&asMap).
+		ReadFunc(&asFn).
+		Complete()
+	if err != nil {
+		return nil, err
 	}
 
 	mappedVals := map[string]Value{}
@@ -592,17 +554,16 @@ func mapMapFn(ec *EvalContext, vals ...Value) (Value, error) {
 // initial value, and iteratively called with the results of the past map and
 // the next element in the map.
 func mapReduceFn(ec *EvalContext, vals ...Value) (Value, error) {
-	if len(vals) != 3 {
-		return nil, fmt.Errorf("mapReduce expects 3 arguments; got %d", len(vals))
-	}
-	initVal := vals[0]
-	asMap, isMap := vals[1].(*MapValue)
-	if !isMap {
-		return nil, fmt.Errorf("mapReduce expects a map as the second argument")
-	}
-	asFn, isFn := vals[2].(*FuncValue)
-	if !isFn {
-		return nil, fmt.Errorf("mapReduce expects a function as the third argument")
+	var initVal Value
+	var asMap *MapValue
+	var asFn *FuncValue
+	err := ArgMapperValues(vals...).
+		ReadValue(&initVal).
+		ReadMap(&asMap).
+		ReadFunc(&asFn).
+		Complete()
+	if err != nil {
+		return nil, err
 	}
 
 	reducedVal := initVal
@@ -619,12 +580,12 @@ func mapReduceFn(ec *EvalContext, vals ...Value) (Value, error) {
 
 // mapKeysFn takes a map and returns it's keys as a list.
 func mapKeysFn(ec *EvalContext, vals ...Value) (Value, error) {
-	if len(vals) != 1 {
-		return nil, fmt.Errorf("mapKeys expects 1 arguments; got %d", len(vals))
-	}
-	asMap, isMap := vals[0].(*MapValue)
-	if !isMap {
-		return nil, fmt.Errorf("mapKeys expects a map as the first argument")
+	var asMap *MapValue
+	err := ArgMapperValues(vals...).
+		ReadMap(&asMap).
+		Complete()
+	if err != nil {
+		return nil, err
 	}
 
 	keys := make([]Value, 0, len(asMap.Vals))
@@ -639,12 +600,12 @@ func mapKeysFn(ec *EvalContext, vals ...Value) (Value, error) {
 
 // mapValuesFn takes a map and returns it's values as a list.
 func mapValuesFn(ec *EvalContext, vals ...Value) (Value, error) {
-	if len(vals) != 1 {
-		return nil, fmt.Errorf("mapValues expects 1 arguments; got %d", len(vals))
-	}
-	asMap, isMap := vals[0].(*MapValue)
-	if !isMap {
-		return nil, fmt.Errorf("mapValues expects a map as the first argument")
+	var asMap *MapValue
+	err := ArgMapperValues(vals...).
+		ReadMap(&asMap).
+		Complete()
+	if err != nil {
+		return nil, err
 	}
 
 	values := make([]Value, 0, len(asMap.Vals))
