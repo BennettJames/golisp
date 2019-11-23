@@ -17,13 +17,6 @@ type (
 		InspectStr() string
 	}
 
-	// CellValue is a representation of a pair of values within the interpreted
-	// environment. This can be composed to represent lists with standard car/cdr
-	// operators.
-	CellValue struct {
-		Left, Right Value
-	}
-
 	// NumberValue is a representation of a number within the interpreted
 	// environment.
 	NumberValue struct {
@@ -52,6 +45,13 @@ type (
 	FuncValue struct {
 		// Fn is the function body the function value references.
 		Fn func(*EvalContext, ...Value) (Value, error)
+	}
+
+	// CellValue is a representation of a pair of values within the interpreted
+	// environment. This can be composed to represent lists with standard car/cdr
+	// operators.
+	CellValue struct {
+		Left, Right Value
 	}
 
 	// ListValue represents a list of values.
