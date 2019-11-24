@@ -147,6 +147,78 @@ func (am *ArgMapper) ReadValue(v *Value) *ArgMapper {
 	return am
 }
 
+// MaybeReadValue will try to read the next argument as any value, or report an
+// error.
+func (am *ArgMapper) MaybeReadValue(v *Value) *ArgMapper {
+	if nextV := am.maybeNext(); nextV != nil {
+		*v = nextV
+	}
+	return am
+}
+
+// ReadNumbers will try to read the remaining argument as number values, or
+// report an error.
+func (am *ArgMapper) ReadNumbers(v *[]*NumberValue) *ArgMapper {
+	nums := []*NumberValue{}
+	for {
+		v := am.maybeNext()
+		if v == nil {
+			break
+		}
+		switch tV := v.(type) {
+		case *NumberValue:
+			nums = append(nums, tV)
+		default:
+			am.err = fmt.Errorf("ArgMapper: type error - expected number, got %T", tV)
+			break
+		}
+	}
+	*v = nums
+	return am
+}
+
+// ReadStrings will try to read the remaining arguments as string values, or
+// report an error.
+func (am *ArgMapper) ReadStrings(v *[]*StringValue) *ArgMapper {
+	nums := []*StringValue{}
+	for {
+		v := am.maybeNext()
+		if v == nil {
+			break
+		}
+		switch tV := v.(type) {
+		case *StringValue:
+			nums = append(nums, tV)
+		default:
+			am.err = fmt.Errorf("ArgMapper: type error - expected number, got %T", tV)
+			break
+		}
+	}
+	*v = nums
+	return am
+}
+
+// ReadBools will try to read the remaining arguments as string values, or
+// report an error.
+func (am *ArgMapper) ReadBools(v *[]*BoolValue) *ArgMapper {
+	nums := []*BoolValue{}
+	for {
+		v := am.maybeNext()
+		if v == nil {
+			break
+		}
+		switch tV := v.(type) {
+		case *BoolValue:
+			nums = append(nums, tV)
+		default:
+			am.err = fmt.Errorf("ArgMapper: type error - expected number, got %T", tV)
+			break
+		}
+	}
+	*v = nums
+	return am
+}
+
 // Complete will return any errors encountered during the mapping; and add a new
 // error if there are still unprocessed arguments remaining.
 func (am *ArgMapper) Complete() error {

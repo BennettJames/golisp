@@ -1,6 +1,7 @@
 package golisp2
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -52,6 +53,124 @@ func Test_ArgMapper(t *testing.T) {
 		require.Equal(t, 1, len(mv.Vals))
 	})
 
+	t.Run("numVarags", func(t *testing.T) {
+		t.Run("basic", func(t *testing.T) {
+			args := []Value{
+				&StringValue{Val: "abc"},
+				&NumberValue{Val: 1},
+				&NumberValue{Val: 2},
+				&NumberValue{Val: 3},
+			}
+
+			var nv []*NumberValue
+			var sv *StringValue
+
+			mapErr := ArgMapperValues(args...).
+				ReadString(&sv).
+				ReadNumbers(&nv).
+				Complete()
+			require.NoError(t, mapErr)
+
+			require.NotNil(t, sv)
+			require.Equal(t, "abc", sv.Val)
+			require.NotNil(t, nv)
+			require.Equal(
+				t,
+				[]*NumberValue{
+					&NumberValue{Val: 1},
+					&NumberValue{Val: 2},
+					&NumberValue{Val: 3},
+				},
+				nv,
+			)
+		})
+
+		t.Run("badType", func(t *testing.T) {
+			args := []Value{
+				&NumberValue{Val: 1},
+				&StringValue{Val: "abc"},
+				&NumberValue{Val: 2},
+			}
+
+			var nv []*NumberValue
+
+			mapErr := ArgMapperValues(args...).
+				ReadNumbers(&nv).
+				Complete()
+			require.Error(t, mapErr)
+		})
+	})
+
+	t.Run("stringVarags", func(t *testing.T) {
+		t.Run("basic", func(t *testing.T) {
+			args := []Value{
+				&StringValue{Val: "abc"},
+				&StringValue{Val: "efg"},
+			}
+			var sv []*StringValue
+			mapErr := ArgMapperValues(args...).
+				ReadStrings(&sv).
+				Complete()
+			require.NoError(t, mapErr)
+			require.NotNil(t, sv)
+			require.Equal(
+				t,
+				[]*StringValue{
+					&StringValue{Val: "abc"},
+					&StringValue{Val: "efg"},
+				},
+				sv,
+			)
+		})
+
+		t.Run("badType", func(t *testing.T) {
+			args := []Value{
+				&StringValue{Val: "abc"},
+				&NumberValue{Val: 1},
+			}
+			var sv []*StringValue
+			mapErr := ArgMapperValues(args...).
+				ReadStrings(&sv).
+				Complete()
+			require.Error(t, mapErr)
+		})
+	})
+
+	t.Run("boolVarargs", func(t *testing.T) {
+		t.Run("basic", func(t *testing.T) {
+			args := []Value{
+				&BoolValue{Val: true},
+				&BoolValue{Val: false},
+			}
+			var bv []*BoolValue
+			mapErr := ArgMapperValues(args...).
+				ReadBools(&bv).
+				Complete()
+			require.NoError(t, mapErr)
+			require.NotNil(t, bv)
+			require.Equal(
+				t,
+				[]*BoolValue{
+					&BoolValue{Val: true},
+					&BoolValue{Val: false},
+				},
+				bv,
+			)
+		})
+
+		t.Run("badType", func(t *testing.T) {
+			args := []Value{
+				&BoolValue{Val: true},
+				&NumberValue{Val: 1},
+			}
+			var bv []*BoolValue
+			mapErr := ArgMapperValues(args...).
+				ReadBools(&bv).
+				Complete()
+			require.Error(t, mapErr)
+		})
+	})
+
 	t.Run("tooManyReads", func(t *testing.T) {
 		args := []Value{
 			&NumberValue{Val: 1},
@@ -98,4 +217,18 @@ func Test_ArgMapper(t *testing.T) {
 		require.Equal(t, 1.0, nv1.Val)
 		require.Nil(t, nv2)
 	})
+}
+
+func Test_nilRules(t *testing.T) {
+	var s *StringValue
+	var v Value = s
+	v = nil
+
+	switch v.(type) {
+	case nil:
+		fmt.Println("@@@ nil")
+	case *StringValue:
+		fmt.Println("@@@ string")
+	}
+
 }

@@ -41,13 +41,16 @@ func BuiltinContext() *EvalContext {
 //
 
 func concatFn(c *EvalContext, vals ...Value) (Value, error) {
+	var strVals []*StringValue
+	err := ArgMapperValues(vals...).
+		ReadStrings(&strVals).
+		Complete()
+	if err != nil {
+		return nil, err
+	}
 	var sb strings.Builder
-	for _, v := range vals {
-		asStr, isStr := v.(*StringValue)
-		if !isStr {
-			return nil, fmt.Errorf("non-string value in add: %v", v.InspectStr())
-		}
-		sb.WriteString(asStr.Val)
+	for _, v := range strVals {
+		sb.WriteString(v.Val)
 	}
 	return &StringValue{
 		Val: sb.String(),
@@ -55,101 +58,105 @@ func concatFn(c *EvalContext, vals ...Value) (Value, error) {
 }
 
 func strEqFn(c *EvalContext, vals ...Value) (Value, error) {
-	if len(vals) != 2 {
-		return nil, fmt.Errorf("strEq expects 2 argument; got %d", len(vals))
-	}
-	v1AsStr, v1IsStr := vals[0].(*StringValue)
-	v2AsStr, v2IsStr := vals[1].(*StringValue)
-	if !v1IsStr || !v2IsStr {
-		return nil, fmt.Errorf("strEq expects two string arguments")
+	var v1, v2 *StringValue
+	err := ArgMapperValues(vals...).
+		ReadString(&v1).
+		ReadString(&v2).
+		Complete()
+	if err != nil {
+		return nil, err
 	}
 	return &BoolValue{
-		Val: v1AsStr.Val == v2AsStr.Val,
+		Val: v1.Val == v2.Val,
 	}, nil
 }
 
 func consFn(c *EvalContext, vals ...Value) (Value, error) {
-	if len(vals) > 2 {
-		return nil, fmt.Errorf("cons expects 0-2 argument; got %d", len(vals))
-	}
 	var v1, v2 Value
-	if len(vals) > 0 {
-		v1 = vals[0]
-	}
-	if len(vals) > 1 {
-		v2 = vals[1]
+	err := ArgMapperValues(vals...).
+		MaybeReadValue(&v1).
+		MaybeReadValue(&v2).
+		Complete()
+	if err != nil {
+		return nil, err
 	}
 	return NewCellValue(v1, v2), nil
 }
 
 func carFn(c *EvalContext, vals ...Value) (Value, error) {
-	if len(vals) != 1 {
-		return nil, fmt.Errorf("car expects 1 argument; got %d", len(vals))
+	var v1 *CellValue
+	err := ArgMapperValues(vals...).
+		ReadCell(&v1).
+		Complete()
+	if err != nil {
+		return nil, err
 	}
-	asNode, isNode := vals[0].(*CellValue)
-	if !isNode {
-		return nil, fmt.Errorf("car expects a cell type, got %v", asNode)
-	}
-	return asNode.Left, nil
+	return v1.Left, nil
 }
 
 func cdrFn(c *EvalContext, vals ...Value) (Value, error) {
-	if len(vals) != 1 {
-		return nil, fmt.Errorf("cdr expects 1 argument; got %d", len(vals))
+	var v1 *CellValue
+	err := ArgMapperValues(vals...).
+		ReadCell(&v1).
+		Complete()
+	if err != nil {
+		return nil, err
 	}
-	asNode, isNode := vals[0].(*CellValue)
-	if !isNode {
-		return nil, fmt.Errorf("cdr expects a cell type, got %v", asNode)
-	}
-	return asNode.Right, nil
+	return v1.Right, nil
 }
 
 func andFn(c *EvalContext, vals ...Value) (Value, error) {
-	if len(vals) == 0 {
-		return nil, fmt.Errorf("and expects at least 1 argument; got %d", len(vals))
+	var firstV *BoolValue
+	var remainingVals []*BoolValue
+	err := ArgMapperValues(vals...).
+		ReadBool(&firstV).
+		ReadBools(&remainingVals).
+		Complete()
+	if err != nil {
+		return nil, err
 	}
-	total := true
-	for _, v := range vals {
-		asBool, isBool := v.(*BoolValue)
-		if !isBool {
-			return nil, fmt.Errorf("and expects bool types, got %v", v)
+	if !firstV.Val {
+		return &BoolValue{Val: false}, nil
+	}
+	for _, v := range remainingVals {
+		if !v.Val {
+			return &BoolValue{Val: false}, nil
 		}
-		// todo (bs): strongly consider short-circuiting this if false is returned
-		total = total && asBool.Val
 	}
-	return &BoolValue{
-		Val: total,
-	}, nil
+	return &BoolValue{Val: true}, nil
 }
 
 func orFn(c *EvalContext, vals ...Value) (Value, error) {
-	if len(vals) == 0 {
-		return nil, fmt.Errorf("or expects at least 1 argument; got %d", len(vals))
+	var firstV *BoolValue
+	var remainingVals []*BoolValue
+	err := ArgMapperValues(vals...).
+		ReadBool(&firstV).
+		ReadBools(&remainingVals).
+		Complete()
+	if err != nil {
+		return nil, err
 	}
-	total := false
-	for _, v := range vals {
-		asBool, isBool := v.(*BoolValue)
-		if !isBool {
-			return nil, fmt.Errorf("or expects bool types, got %v", v)
+	if firstV.Val {
+		return &BoolValue{Val: true}, nil
+	}
+	for _, v := range remainingVals {
+		if v.Val {
+			return &BoolValue{Val: true}, nil
 		}
-		// todo (bs): strongly consider short-circuiting this if true is returned
-		total = total || asBool.Val
 	}
-	return &BoolValue{
-		Val: total,
-	}, nil
+	return &BoolValue{Val: false}, nil
 }
 
 func notFn(c *EvalContext, vals ...Value) (Value, error) {
-	if len(vals) != 1 {
-		return nil, fmt.Errorf("not expects 1 argument; got %d", len(vals))
-	}
-	asBool, isBool := vals[0].(*BoolValue)
-	if !isBool {
-		return nil, fmt.Errorf("not expects bool argument, got %v", vals[0])
+	var v1 *BoolValue
+	err := ArgMapperValues(vals...).
+		ReadBool(&v1).
+		Complete()
+	if err != nil {
+		return nil, err
 	}
 	return &BoolValue{
-		Val: !asBool.Val,
+		Val: !v1.Val,
 	}, nil
 }
 
@@ -158,15 +165,18 @@ func notFn(c *EvalContext, vals ...Value) (Value, error) {
 //
 
 func addFn(c *EvalContext, vals ...Value) (Value, error) {
-	total := float64(0)
-	for _, v := range vals {
-		asNum, isNum := v.(*NumberValue)
-		if !isNum {
-			// note (bs): eventually, try to make a version of this error that's more
-			// portable, obvious, and a little more resilient to nil values.
-			return nil, fmt.Errorf("non-number value in add: %v", v.InspectStr())
-		}
-		total += asNum.Val
+	var firstVal *NumberValue
+	var remainingVals []*NumberValue
+	err := ArgMapperValues(vals...).
+		ReadNumber(&firstVal).
+		ReadNumbers(&remainingVals).
+		Complete()
+	if err != nil {
+		return nil, err
+	}
+	total := firstVal.Val
+	for _, v := range remainingVals {
+		total += v.Val
 	}
 	return &NumberValue{
 		Val: total,
@@ -174,43 +184,37 @@ func addFn(c *EvalContext, vals ...Value) (Value, error) {
 }
 
 func subFn(c *EvalContext, vals ...Value) (Value, error) {
-	// ques (bs): should I still enforce minimum airity requirements here? I'm
-	// sorta inclined to say yes; but not sure how much I care about that right
-	// now. Particularly: that seems to get into deeper questions of type
-	// enforcement. Something like this could just be reduced to a set of number
-	// values, and an error returned if
-	//
-	// That all seems like a "later" task. I'd like to just grind a bit on the
-	// core language; some better limitations or even
-
-	total := float64(0)
-	for i, v := range vals {
-		asNum, isNum := v.(*NumberValue)
-		if !isNum {
-			// note (bs): eventually, try to make a version of this error that's more
-			// portable, obvious, and a little more resilient to nil values.
-			return nil, fmt.Errorf("non-number value in add: %v", v.InspectStr())
-		}
-		if i == 0 {
-			total = asNum.Val
-		} else {
-			total -= asNum.Val
-		}
+	var firstVal *NumberValue
+	var remainingVals []*NumberValue
+	err := ArgMapperValues(vals...).
+		ReadNumber(&firstVal).
+		ReadNumbers(&remainingVals).
+		Complete()
+	if err != nil {
+		return nil, err
 	}
-
+	total := firstVal.Val
+	for _, v := range remainingVals {
+		total -= v.Val
+	}
 	return &NumberValue{
 		Val: total,
 	}, nil
 }
 
 func multFn(c *EvalContext, vals ...Value) (Value, error) {
-	total := float64(1)
-	for _, v := range vals {
-		asNum, isNum := v.(*NumberValue)
-		if !isNum {
-			return nil, fmt.Errorf("non-number value in add: %v", v.InspectStr())
-		}
-		total *= asNum.Val
+	var firstVal *NumberValue
+	var remainingVals []*NumberValue
+	err := ArgMapperValues(vals...).
+		ReadNumber(&firstVal).
+		ReadNumbers(&remainingVals).
+		Complete()
+	if err != nil {
+		return nil, err
+	}
+	total := firstVal.Val
+	for _, v := range remainingVals {
+		total *= v.Val
 	}
 	return &NumberValue{
 		Val: total,
@@ -218,17 +222,18 @@ func multFn(c *EvalContext, vals ...Value) (Value, error) {
 }
 
 func divFn(c *EvalContext, vals ...Value) (Value, error) {
-	total := float64(1)
-	for i, v := range vals {
-		asNum, isNum := v.(*NumberValue)
-		if !isNum {
-			return nil, fmt.Errorf("non-number value in add: %v", v.InspectStr())
-		}
-		if i == 0 {
-			total = asNum.Val
-		} else {
-			total /= asNum.Val
-		}
+	var firstVal *NumberValue
+	var remainingVals []*NumberValue
+	err := ArgMapperValues(vals...).
+		ReadNumber(&firstVal).
+		ReadNumbers(&remainingVals).
+		Complete()
+	if err != nil {
+		return nil, err
+	}
+	total := firstVal.Val
+	for _, v := range remainingVals {
+		total /= v.Val
 	}
 	return &NumberValue{
 		Val: total,
