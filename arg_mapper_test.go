@@ -1,7 +1,6 @@
 package golisp2
 
 import (
-	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -217,18 +216,4 @@ func Test_ArgMapper(t *testing.T) {
 		require.Equal(t, 1.0, nv1.Val)
 		require.Nil(t, nv2)
 	})
-}
-
-func Test_nilRules(t *testing.T) {
-	var s *StringValue
-	var v Value = s
-	v = nil
-
-	switch v.(type) {
-	case nil:
-		fmt.Println("@@@ nil")
-	case *StringValue:
-		fmt.Println("@@@ string")
-	}
-
 }
