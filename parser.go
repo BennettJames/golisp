@@ -263,7 +263,7 @@ func tryParseIfTail(ts *TokenScanner) (Expr, error) {
 	}, nil
 }
 
-// tryParseIfTail will complete the parse of an function delcaration where the
+// tryParseIfTail will complete the parse of an function declaration where the
 // open paren has already been scanned.
 func tryParseFnTail(ts *TokenScanner) (Expr, error) {
 	maybeStartToken := ts.Token()
