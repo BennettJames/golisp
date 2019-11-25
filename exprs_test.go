@@ -7,58 +7,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func Test_mathFn(t *testing.T) {
-	t.Run("add", func(t *testing.T) {
-		v, e := NewCallExpr(
-			NewFuncLiteral("", addFn),
-			NewNumberLiteral(1),
-			NewNumberLiteral(2),
-		).Eval(BuiltinContext())
-		require.NoError(t, e)
-		assertNumValue(t, v, 3)
-	})
-
-	t.Run("sub", func(t *testing.T) {
-		v, e := NewCallExpr(
-			NewFuncLiteral("", subFn),
-			NewNumberLiteral(2),
-			NewNumberLiteral(1),
-		).Eval(BuiltinContext())
-		require.NoError(t, e)
-		assertNumValue(t, v, 1)
-	})
-
-	t.Run("mult", func(t *testing.T) {
-		v, e := NewCallExpr(
-			NewFuncLiteral("", multFn),
-			NewNumberLiteral(3),
-			NewNumberLiteral(4),
-		).Eval(BuiltinContext())
-		require.NoError(t, e)
-		assertNumValue(t, v, 12)
-	})
-
-	t.Run("divide", func(t *testing.T) {
-		v, e := NewCallExpr(
-			NewFuncLiteral("", divFn),
-			NewNumberLiteral(6),
-			NewNumberLiteral(2),
-		).Eval(BuiltinContext())
-		require.NoError(t, e)
-		assertNumValue(t, v, 3)
-	})
-}
-
-func Test_concat(t *testing.T) {
-	v, e := NewCallExpr(
-		NewIdentLiteral("concat"),
-		NewStringLiteral("abc"),
-		NewStringLiteral("efg"),
-	).Eval(BuiltinContext())
-	require.NoError(t, e)
-	assertStringValue(t, v, "abcefg")
-}
-
 func Test_cell(t *testing.T) {
 	v, e := NewCallExpr(
 		NewIdentLiteral("cons"),
@@ -82,62 +30,6 @@ func Test_cell(t *testing.T) {
 	assertStringValue(t, left, "a")
 	assertStringValue(t, right, "b")
 	require.Equal(t, "(\"a\" . \"b\")", v.InspectStr())
-}
-
-func Test_bool(t *testing.T) {
-
-	t.Run("and", func(t *testing.T) {
-		v1, e1 := NewCallExpr(
-			NewIdentLiteral("and"),
-			NewBoolLiteral(true),
-			NewBoolLiteral(true),
-		).Eval(BuiltinContext())
-		require.NoError(t, e1)
-		assertBoolValue(t, v1, true)
-
-		v2, e2 := NewCallExpr(
-			NewIdentLiteral("and"),
-			NewBoolLiteral(true),
-			NewBoolLiteral(false),
-		).Eval(BuiltinContext())
-		require.NoError(t, e2)
-		assertBoolValue(t, v2, false)
-	})
-
-	t.Run("or", func(t *testing.T) {
-		v1, e1 := NewCallExpr(
-			NewIdentLiteral("or"),
-			NewBoolLiteral(true),
-			NewBoolLiteral(false),
-		).Eval(BuiltinContext())
-		require.NoError(t, e1)
-		assertBoolValue(t, v1, true)
-
-		v2, e2 := NewCallExpr(
-			NewIdentLiteral("or"),
-			NewBoolLiteral(false),
-			NewBoolLiteral(false),
-			NewBoolLiteral(false),
-		).Eval(BuiltinContext())
-		require.NoError(t, e2)
-		assertBoolValue(t, v2, false)
-	})
-
-	t.Run("not", func(t *testing.T) {
-		v1, e1 := NewCallExpr(
-			NewIdentLiteral("not"),
-			NewBoolLiteral(true),
-		).Eval(BuiltinContext())
-		require.NoError(t, e1)
-		assertBoolValue(t, v1, false)
-
-		v2, e2 := NewCallExpr(
-			NewIdentLiteral("not"),
-			NewBoolLiteral(false),
-		).Eval(BuiltinContext())
-		require.NoError(t, e2)
-		assertBoolValue(t, v2, true)
-	})
 }
 
 func Test_ident(t *testing.T) {
@@ -323,16 +215,18 @@ func Test_CodeStr(t *testing.T) {
 			NewFnExpr(
 				[]Arg{
 					{Ident: "a"},
+					{Ident: "b"},
 				},
 				[]Expr{
 					NewCallExpr(
 						NewIdentLiteral("add"),
 						NewIdentLiteral("a"),
-						NewNumberLiteral(1),
+						NewIdentLiteral("b"),
 					),
 				},
 			),
 			NewNumberLiteral(5),
+			NewNumberLiteral(1),
 		)
 		reparsedExpr := printAndReparse(t, baseAST)
 		v := mustEval(t, reparsedExpr, BuiltinContext().SubContext(map[string]Value{

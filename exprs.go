@@ -217,8 +217,6 @@ func (fe *FnExpr) Eval(parentEc *EvalContext) (Value, error) {
 
 // CodeStr will return the code representation of the fn expression.
 func (fe *FnExpr) CodeStr() string {
-	// fixme (bs): implement
-
 	var sb strings.Builder
 	sb.WriteString("(fn (")
 	for i, a := range fe.Args {
@@ -233,22 +231,6 @@ func (fe *FnExpr) CodeStr() string {
 		sb.WriteString(e.CodeStr())
 	}
 	sb.WriteString(")\n")
-	return sb.String()
-}
-
-// InspectStr returns a user-readable representation of the function expression.
-func (fe *FnExpr) InspectStr() string {
-	// ques (bs): what should this be? I'd say the name and the arg list. The
-	// names not strictly known here though; so maybe just the arg list?
-	var sb strings.Builder
-	sb.WriteString("fn (")
-	for i, a := range fe.Args {
-		if i > 0 {
-			sb.WriteString(" ")
-		}
-		sb.WriteString(a.Ident)
-	}
-	sb.WriteString(")")
 	return sb.String()
 }
 
