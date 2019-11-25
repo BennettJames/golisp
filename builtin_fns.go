@@ -25,6 +25,7 @@ func BuiltinContext() *EvalContext {
 		"listFilter": &FuncValue{Fn: listFilterFn},
 		"listMap":    &FuncValue{Fn: listMapFn},
 		"listReduce": &FuncValue{Fn: listReduceFn},
+		"len":        &FuncValue{Fn: lenFn},
 
 		"map":       &FuncValue{Fn: mapCreateFn},
 		"mapGet":    &FuncValue{Fn: mapGetFn},
@@ -33,6 +34,8 @@ func BuiltinContext() *EvalContext {
 		"mapReduce": &FuncValue{Fn: mapReduceFn},
 		"mapKeys":   &FuncValue{Fn: mapKeysFn},
 		"mapValues": &FuncValue{Fn: mapValuesFn},
+
+		"print": &FuncValue{Fn: printFn},
 	})
 }
 
@@ -192,6 +195,11 @@ func subFn(c *EvalContext, vals ...Value) (Value, error) {
 		Complete()
 	if err != nil {
 		return nil, err
+	}
+	if len(remainingVals) == 0 {
+		return &NumberValue{
+			Val: -firstVal.Val,
+		}, nil
 	}
 	total := firstVal.Val
 	for _, v := range remainingVals {
@@ -621,4 +629,49 @@ func mapValuesFn(ec *EvalContext, vals ...Value) (Value, error) {
 	return &ListValue{
 		Vals: values,
 	}, nil
+}
+
+//
+// Misc values
+//
+
+// printFn outputs the values in stdout.
+func printFn(ec *EvalContext, vals ...Value) (Value, error) {
+	for i, v := range vals {
+		if i > 0 {
+			fmt.Print(" ")
+		}
+		fmt.Print(v.InspectStr())
+	}
+	fmt.Println()
+	return &NilValue{}, nil
+}
+
+// lenFn will return the length of maps, lists, and strings.
+func lenFn(ec *EvalContext, vals ...Value) (Value, error) {
+	var val Value
+	err := ArgMapperValues(vals...).
+		ReadValue(&val).
+		Complete()
+	if err != nil {
+		return nil, err
+	}
+
+	// ques (bs): should this be solved via subtyping?
+	switch tV := val.(type) {
+	case *ListValue:
+		return &NumberValue{
+			Val: float64(len(tV.Vals)),
+		}, nil
+	case *StringValue:
+		return &NumberValue{
+			Val: float64(len(tV.Val)),
+		}, nil
+	case *MapValue:
+		return &NumberValue{
+			Val: float64(len(tV.Vals)),
+		}, nil
+	default:
+		return nil, fmt.Errorf("Cannot get length of type %T", tV)
+	}
 }

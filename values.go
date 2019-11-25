@@ -2,6 +2,7 @@ package golisp2
 
 import (
 	"fmt"
+	"math"
 	"strings"
 )
 
@@ -9,10 +10,7 @@ type (
 	// Value represents any arbitrary value within the lisp interpreting
 	// environment. While it just extends "expr", the implicit contract is that no
 	// work is actually performed at eval time; it just returns itself.
-	//
-	// note (bs): not sure this is valuable; also not sure
 	Value interface {
-
 		// InspectStr returns a printable version of the expression.
 		InspectStr() string
 	}
@@ -93,6 +91,9 @@ func (cv *CellValue) InspectStr() string {
 
 // InspectStr prints the number.
 func (nv *NumberValue) InspectStr() string {
+	if nv.Val == math.Trunc(nv.Val) {
+		return fmt.Sprintf("%d", int64(nv.Val))
+	}
 	return fmt.Sprintf("%f", nv.Val)
 }
 

@@ -162,6 +162,10 @@ func Test_math(t *testing.T) {
 				out: -1,
 			},
 			testCase{
+				in:  `(- 22)`,
+				out: -22,
+			},
+			testCase{
 				in:  `(- 1 nil)`,
 				err: true,
 			},
@@ -426,5 +430,37 @@ func Test_comparisons(t *testing.T) {
 				err: true,
 			},
 		)
+	})
+}
+
+func Test_print(t *testing.T) {
+	// note (bs): this isn't really a meaningful test; not sure if there's a good
+	// way to do so without some very awkward dependency reconfiguration
+
+	assertNilValue(t, evalStrToVal(t, `(print (list 1 2 3))`))
+	assertNilValue(t, evalStrToVal(t, `(print)`))
+	assertNilValue(t, evalStrToVal(t, `(print 1 2 3)`))
+}
+
+func Test_len(t *testing.T) {
+
+	t.Run("list", func(t *testing.T) {
+		assertNumValue(t, evalStrToVal(t, `(len (list 1 2 3))`), 3)
+	})
+
+	t.Run("map", func(t *testing.T) {
+		assertNumValue(t, evalStrToVal(t, `(len (map "a" 1 "b" 2))`), 2)
+	})
+
+	t.Run("string", func(t *testing.T) {
+		assertNumValue(t, evalStrToVal(t, `(len "abcde")`), 5)
+	})
+
+	t.Run("badType", func(t *testing.T) {
+		evalStrToErr(t, `(len nil)`)
+	})
+
+	t.Run("badArgLen", func(t *testing.T) {
+		evalStrToErr(t, `(len "a" "b")`)
 	})
 }

@@ -6,7 +6,6 @@ import (
 )
 
 type (
-
 	// Expr is the fundamental unit of lisp - it represents anything that can be
 	// evaluated to a value.
 	Expr interface {
