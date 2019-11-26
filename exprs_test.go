@@ -100,18 +100,32 @@ func Test_parenExpr(t *testing.T) {
 }
 
 func Test_ifExpr(t *testing.T) {
-	v1 := mustEval(t, NewIfExpr(
-		NewBoolLiteral(true),
-		NewNumberLiteral(1),
-		NewNumberLiteral(2),
-	), nil)
-	assertNumValue(t, v1, 1)
-	v2 := mustEval(t, NewIfExpr(
-		NewBoolLiteral(false),
-		NewNumberLiteral(1),
-		NewNumberLiteral(2),
-	), nil)
-	assertNumValue(t, v2, 2)
+
+	t.Run("basic", func(t *testing.T) {
+		v1 := mustEval(t, NewIfExpr(
+			NewBoolLiteral(true),
+			NewNumberLiteral(1),
+			NewNumberLiteral(2),
+		), nil)
+		assertNumValue(t, v1, 1)
+		v2 := mustEval(t, NewIfExpr(
+			NewBoolLiteral(false),
+			NewNumberLiteral(1),
+			NewNumberLiteral(2),
+		), nil)
+		assertNumValue(t, v2, 2)
+	})
+
+	t.Run("errors", func(t *testing.T) {
+		v, err := NewIfExpr(
+			NewNumberLiteral(0),
+			NewNumberLiteral(1),
+			NewNumberLiteral(2),
+		).Eval(BuiltinContext())
+		require.Error(t, err)
+		require.IsType(t, (*TypeError)(nil), err)
+		require.Nil(t, v)
+	})
 }
 
 func Test_fnExpr(t *testing.T) {

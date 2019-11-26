@@ -6,38 +6,57 @@ type (
 	// ParseError reflects an error that took place during parsing. It contains
 	// information
 	ParseError struct {
-		msg   string
-		token ScannedToken
+		Msg   string
+		Token ScannedToken
 	}
 
 	// ForbiddenRuneError indicates that an illegal character was found in the
 	// source.
 	ForbiddenRuneError struct {
-		r   rune
-		pos ScannerPosition
+		R   rune
+		Pos ScannerPosition
 	}
 
 	// TypeError is a runtime error when the incorrect type is passed to a
 	// function.
 	TypeError struct {
-		actual, expected string
-		pos              ScannerPosition
+		Actual, Expected string
+		Pos              ScannerPosition
+	}
+
+	// EvalError is a basic runtime error indicating something went wrong during
+	// execution.
+	EvalError struct {
+		Msg string
+		Pos ScannerPosition
+	}
+
+	// ArgTypeError indicates a mismatch between a given argument value and the
+	// expected type.
+	//
+	// note (bs): this is a fairly awkward error type that probably should just be
+	// a type error. However, there are some structural limitations with built-ins
+	// that make that challenging.
+	ArgTypeError struct {
+		FnName           string
+		ArgI             int
+		Expected, Actual string
 	}
 )
 
 // NewParseError creates a new parse error with the given message and token.
 func NewParseError(msg string, token ScannedToken) *ParseError {
 	return &ParseError{
-		msg:   msg,
-		token: token,
+		Msg:   msg,
+		Token: token,
 	}
 }
 
 // NewParseEOFError represents a parsing error for unexpected EOF.
 func NewParseEOFError(msg string, pos ScannerPosition) *ParseError {
 	return &ParseError{
-		msg: msg,
-		token: ScannedToken{
+		Msg: msg,
+		Token: ScannedToken{
 			Typ: NoTT,
 			Pos: pos,
 		},
@@ -48,7 +67,7 @@ func NewParseEOFError(msg string, pos ScannerPosition) *ParseError {
 func (pe ParseError) Error() string {
 	// note (bs): I don't think this is a very well-laid out error message, but
 	// it's a place to start at least.
-	msg, token, pos := pe.msg, pe.token, pe.token.Pos
+	msg, token, pos := pe.Msg, pe.Token, pe.Token.Pos
 	return fmt.Sprintf(
 		"Parse error %s for token `%s`: file '%s' at line %d, column %d",
 		msg, token.Value, pos.SourceFile, pos.Row, pos.Col)
@@ -58,8 +77,8 @@ func (pe ParseError) Error() string {
 // location it was found.
 func NewForbiddenRuneError(r rune, pos ScannerPosition) *ForbiddenRuneError {
 	return &ForbiddenRuneError{
-		r:   r,
-		pos: pos,
+		R:   r,
+		Pos: pos,
 	}
 }
 
@@ -67,22 +86,32 @@ func NewForbiddenRuneError(r rune, pos ScannerPosition) *ForbiddenRuneError {
 func (pe ForbiddenRuneError) Error() string {
 	return fmt.Sprintf(
 		"Forbidden rune '%x' found in scan of '%s' (line %d, col %d)",
-		pe.r, pe.pos.SourceFile, pe.pos.Row, pe.pos.Col)
+		pe.R, pe.Pos.SourceFile, pe.Pos.Row, pe.Pos.Col)
 }
 
 // NewTypeError creates a new type error with the actual and expected types at
 // the given location in source.
 func NewTypeError(actual, expected string, pos ScannerPosition) *TypeError {
 	return &TypeError{
-		actual:   actual,
-		expected: expected,
-		pos:      pos,
+		Actual:   actual,
+		Expected: expected,
+		Pos:      pos,
 	}
 }
 
 func (te TypeError) Error() string {
 	return fmt.Sprintf(
 		"Type error: expected '%s', got '%s' (%s:%d)",
-		te.expected, te.actual,
-		te.pos.SourceFile, te.pos.Row)
+		te.Expected, te.Actual,
+		te.Pos.SourceFile, te.Pos.Row)
+}
+
+func (ee EvalError) Error() string {
+	return fmt.Sprintf("Eval error '%s': '%s' (line %d, col %d)",
+		ee.Msg, ee.Pos.SourceFile, ee.Pos.Row, ee.Pos.Col)
+}
+
+func (ate *ArgTypeError) Error() string {
+	return fmt.Sprintf("Arg-type error in '%s' at arg %d: expected '%s', got '%s'",
+		ate.FnName, ate.ArgI, ate.Expected, ate.Actual)
 }

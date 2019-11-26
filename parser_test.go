@@ -92,9 +92,9 @@ func Test_ParseTokens(t *testing.T) {
 			err := parseStrToErr(t, `(++== 1 2)`)
 			require.IsType(t, (*ParseError)(nil), err)
 			asPE := err.(*ParseError)
-			require.Equal(t, "++==", asPE.token.Value)
-			require.Equal(t, 2, asPE.token.Pos.Col)
-			require.Equal(t, 1, asPE.token.Pos.Row)
+			require.Equal(t, "++==", asPE.Token.Value)
+			require.Equal(t, 2, asPE.Token.Pos.Col)
+			require.Equal(t, 1, asPE.Token.Pos.Row)
 		})
 
 		t.Run("invalidFn", func(t *testing.T) {

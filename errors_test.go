@@ -41,3 +41,25 @@ func Test_TypeError(t *testing.T) {
 	)
 	require.Contains(t, err.Error(), "Type")
 }
+
+func Test_EvalError(t *testing.T) {
+	err := EvalError{
+		Msg: "runtime error",
+		Pos: ScannerPosition{
+			SourceFile: "abc.l",
+			Col:        3,
+			Row:        4,
+		},
+	}
+	require.Contains(t, err.Error(), "Eval")
+}
+
+func Test_ArgTypeError(t *testing.T) {
+	err := ArgTypeError{
+		FnName:   "add",
+		ArgI:     2,
+		Expected: "Number",
+		Actual:   "nil",
+	}
+	require.Contains(t, err.Error(), "Arg")
+}

@@ -27,3 +27,5 @@
 (print (len listOne))
 (print (- 0 (len (list 1 2 3))))
 
+; example error
+; (print (lenn "abc"))

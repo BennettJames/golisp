@@ -46,11 +46,11 @@ func Test_RuneScanner(t *testing.T) {
 		require.Error(t, rs.Err())
 		asForbidden, isForbidden := rs.Err().(*ForbiddenRuneError)
 		require.True(t, isForbidden)
-		require.Equal(t, '\x00', asForbidden.r)
+		require.Equal(t, '\x00', asForbidden.R)
 		require.Equal(t, ScannerPosition{
 			SourceFile: fName,
 			Col:        1,
 			Row:        1,
-		}, asForbidden.pos)
+		}, asForbidden.Pos)
 	})
 }

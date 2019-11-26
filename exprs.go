@@ -72,14 +72,9 @@ func (ce *CallExpr) Eval(ec *EvalContext) (Value, error) {
 		return &NilValue{}, nil
 	}
 
-	v1, v1Err := ce.Exprs[0].Eval(ec)
-	if v1Err != nil {
-		// todo (bs): wrap with position information from ce.Pos
-		return nil, v1Err
-	}
-	asFn, isFn := v1.(*FuncValue)
-	if !isFn {
-		return nil, fmt.Errorf("A call with more than 1 value must start with a function")
+	fn, fnErr := evalToFunc(ec, ce.Exprs[0])
+	if fnErr != nil {
+		return nil, fnErr
 	}
 
 	vals := []Value{}
@@ -91,7 +86,7 @@ func (ce *CallExpr) Eval(ec *EvalContext) (Value, error) {
 		}
 		vals = append(vals, v)
 	}
-	callVal, callValErr := asFn.Fn(ec, vals...)
+	callVal, callValErr := fn.Fn(ec, vals...)
 	return callVal, callValErr
 }
 
@@ -139,8 +134,11 @@ func (ie *IfExpr) Eval(ec *EvalContext) (Value, error) {
 	}
 	asBool, isBool := condV.(*BoolValue)
 	if !isBool {
-		// todo (bs): add pos information
-		return nil, fmt.Errorf("if must be given a boolean condition in the first argument")
+		return nil, &TypeError{
+			Actual:   fmt.Sprintf("%T", condV),
+			Expected: fmt.Sprintf("%T", (*BoolValue)(nil)),
+			Pos:      ie.Cond.SourcePos(),
+		}
 	}
 	if asBool.Val {
 		return ie.Case1.Eval(ec)
@@ -178,13 +176,14 @@ func NewFnExpr(args []Arg, body []Expr) *FnExpr {
 // execute the function; it must be evaluated within a call to be actually
 // executed.
 func (fe *FnExpr) Eval(parentEc *EvalContext) (Value, error) {
-	// note (bs): I don't think this should be returning a func value per se. This
-	// is a good case where perhaps having some plain functions in place of the
-	// strict AST would make sense; but I'm not sure yet.
+
+	// ques (bs): how should stack traces work here? At this point, for full
+	// traces (rather than just "origination errors")
 
 	fn := func(_ *EvalContext, vals ...Value) (Value, error) {
 		if len(fe.Args) != len(vals) {
-			// todo (bs): add pos information
+
+			// todo (bs): add pos information.
 			return nil, fmt.Errorf("expected %d arguments in call; got %d",
 				len(fe.Args), len(vals))
 		}
@@ -259,4 +258,41 @@ func (le *LetExpr) CodeStr() string {
 // SourcePos is the location in source this expression came from.
 func (le *LetExpr) SourcePos() ScannerPosition {
 	return le.Pos
+}
+
+// evalToFunc will evaluate the given expression, expecting a function. Will
+// return a well-formed error i
+func evalToFunc(evalCtx *EvalContext, expr Expr) (*FuncValue, error) {
+	var val Value
+	switch v := expr.(type) {
+	case *IdentLiteral:
+		// In the case of idents, manually inspect to see if it's nil. This is to
+		// make errors more obvious in the case of a function simply being an
+		// undefined name.
+		identVal, hasIdent := evalCtx.Resolve(v.Val)
+		if !hasIdent {
+			return nil, &EvalError{
+				Msg: fmt.Sprintf(
+					"undefined identifier '%s' cannot be used as function", v.Val),
+				Pos: v.SourcePos(),
+			}
+		}
+		val = identVal
+	default:
+		var v1Err error
+		val, v1Err = expr.Eval(evalCtx)
+		if v1Err != nil {
+			// note (bs): for stack errors; this would still need to be wrapped
+			return nil, v1Err
+		}
+	}
+	asFn, isFn := val.(*FuncValue)
+	if !isFn {
+		return nil, &TypeError{
+			Actual:   fmt.Sprintf("%T", val),
+			Expected: fmt.Sprintf("%T", (*FuncValue)(nil)),
+			Pos:      expr.SourcePos(),
+		}
+	}
+	return asFn, nil
 }

@@ -32,7 +32,6 @@ func main() {
 	if err := execFile(ctx, files[0], *showVals); err != nil {
 		log.Fatal(err)
 	}
-	fmt.Println("@@@ completed run")
 }
 
 func execFile(ctx context.Context, file string, showVals bool) error {
